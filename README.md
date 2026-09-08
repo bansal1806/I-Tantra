@@ -18,22 +18,32 @@ extreme semantic codec: throw away the waveform, keep the meaning, resynthesize 
 [docs/architecture.md](docs/architecture.md) for the full design and
 [docs/rubric-mapping.md](docs/rubric-mapping.md) for how this maps to the evaluation criteria.
 
+**Pitch deck**: [claude.ai/code/artifact/d5479658-...](https://claude.ai/code/artifact/d5479658-1b2c-4063-9041-e7602abfd424) — built
+from this repo's real measured numbers, not projections.
+**Demo script**: [docs/demo-script.md](docs/demo-script.md) — the live two-phone walkthrough,
+rehearsal-ready.
+
 ## Status
 
-**M0 (desktop spike) is done.** `desktop-spike/roundtrip_test.py` runs the whole loop —
-text → TTS → wav → VAD → STT → text — for Hindi and English, fully offline, and both come back
-100% correct.
+**M0 through M4 are done and verified on real two-phone hardware** (a OnePlus 9RT and a Vivo
+V2336, connected over one phone's mobile hotspot). Push-to-talk works both directions, Hindi
+and English, fully offline: speak into one phone, the other speaks it back — with a live
+bitrate-savings readout, an alert mode that overrides silent/DND at max volume, and live
+RTF/latency numbers baked into the UI itself. See [docs/metrics.md](docs/metrics.md) for real
+captured numbers and [docs/demo-script.md](docs/demo-script.md) for how to run the demo.
 
-**M1 (Android, single phone, Hindi) is done and verified on real hardware** — a OnePlus 9RT
-(Android 14, arm64). Push-to-talk correctly transcribes spoken Hindi, and typed Hindi text is
-spoken back audibly, fully offline. English is next (same pipeline, just needs the English
-model assets bundled and a language toggle in the UI), then M2 (two-phone transport).
+Next up: M5 (the remaining 8 languages) and the stretch goals (speaker-timbre, a real LoRa
+link, cross-lingual translation, store-and-forward/FEC) — see the milestones table below.
 
-### Try it on your phone
+### Try it on your phone(s)
 
-1. Enable Developer Options + USB debugging on the phone, connect it via USB.
-2. From `android/`: `gradlew.bat installDebug` (or open the project in Android Studio and hit Run).
-3. Grant the mic permission when prompted, wait for "Ready", hold the button and speak Hindi.
+1. Enable Developer Options + USB debugging on each phone, connect via USB.
+2. From `android/`: `gradlew.bat installDebug` per connected phone (`adb -s <serial>` if both
+   are plugged in at once), or open the project in Android Studio and hit Run.
+3. Grant the mic permission when prompted, wait for "Ready".
+4. For the two-phone loop: put both phones on the same Wi-Fi (a hotspot from one of them is
+   most reliable — see [docs/demo-script.md](docs/demo-script.md) for the exact steps and why
+   a shared router can silently fail here). One taps **Host**, the other **Join**s its IP.
 
 ### Quickstart (M0)
 
@@ -58,20 +68,21 @@ Two things worth knowing if you touch the STT model setup:
 - `desktop-spike/` — Python scripts that prove STT/VAD/TTS work standalone, before Android (M0).
 - `scripts/` — model download/setup scripts.
 - `models/` — fetched ONNX models (gitignored; run `scripts/download_models.ps1`).
-- `android/` — the Kotlin Android app (M1+).
-- `tools/metrics/` — live measurement dashboard: WER, RTF, bytes-on-wire, end-to-end latency (M4).
-- `docs/` — architecture and rubric-mapping notes.
+- `android/` — the Kotlin Android app: `SherpaEngine.kt` (VAD+STT+TTS), `Transport.kt` +
+  `Frame.kt` (the two-phone link and wire protocol), `MainActivity.kt` (UI + wiring).
+- `docs/` — architecture, rubric mapping, real measured metrics, and the demo script.
 
 ## Milestones
 
-| # | Milestone | Done when |
-|---|-----------|-----------|
-| M0 | Desktop spike | WAV→text and text→WAV work offline in Python, Hindi + English |
-| M1 | Android skeleton, single phone | Push-to-talk shows correct text; typed text is spoken aloud |
-| M2 | Two-phone transport | Speak on phone A, hear it on phone B, offline, ~1-2s |
-| M3 | Innovation layer | Live bitrate/compression display; alert messages override volume/silent mode |
-| M4 | Metrics + hardening | Real WER/RTF/latency/footprint numbers from physical phones |
-| M5 | Language expansion | Remaining 8 languages added; weak TTS voices revisited |
+| # | Milestone | Done when | Status |
+|---|-----------|-----------|--------|
+| M0 | Desktop spike | WAV→text and text→WAV work offline in Python, Hindi + English | ✅ Done |
+| M1 | Android skeleton, single phone | Push-to-talk shows correct text; typed text is spoken aloud | ✅ Done |
+| M2 | Two-phone transport | Speak on phone A, hear it on phone B, offline, ~1-2s | ✅ Done |
+| M3 | Innovation layer | Live bitrate/compression display; alert messages override volume/silent mode | ✅ Done |
+| M4 | Metrics + hardening | Real WER/RTF/latency/footprint numbers from physical phones | ✅ Done |
+| M5 | Language expansion | Remaining 8 languages added; weak TTS voices revisited | ⏳ Next |
+| — | Stretch (pick one) | Speaker-timbre, real LoRa link, cross-lingual, store-and-forward+FEC | Not started |
 
 Full plan: `C:\Users\Admin\.claude\plans\drifting-swinging-fairy.md`.
 
