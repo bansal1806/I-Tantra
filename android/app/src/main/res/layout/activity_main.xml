@@ -160,8 +160,19 @@
             android:layout_marginTop="12dp"
             android:text="@string/label_send_as_alert" />
 
-        <!-- Push-to-talk: STT direction. When connected, the recognized text is also sent
-             to the peer, who speaks it: that's the walkie-talkie. -->
+        <!-- PS requirement: push-to-talk, "if turned off it should work like a phone":
+             continuous, hands-free, VAD auto-segmented (SherpaEngine.startPhoneMode). -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/pttModeSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:checked="true"
+            android:text="@string/label_ptt_mode" />
+
+        <!-- Push-to-talk (or, mode switched off, tap-to-start-call): STT direction. When
+             connected, what's recognized is also sent to the peer, who speaks it: that's
+             the walkie-talkie (or, mode off, the phone call). -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/pttButton"
             android:layout_width="match_parent"

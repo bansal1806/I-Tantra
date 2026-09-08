@@ -13,8 +13,10 @@ import java.nio.charset.StandardCharsets
  *   [1B version][1B lang][1B priority][2B text length][UTF-8 text bytes]
  *
  * 5 bytes of header + however long the sentence is in UTF-8 -- typically tens of bytes for
- * a spoken sentence, vs. kilobytes for even a well-compressed voice note. `priority` is
- * reserved as 0 (normal) for now; M3 uses it for the alert side-channel.
+ * a spoken sentence, vs. kilobytes for even a well-compressed voice note. `priority` carries
+ * both the M3 alert side-channel and (PRIORITY_MUTE_START/STOP) phone mode's echo-avoidance
+ * signaling -- both content-free concerns riding the same tiny header instead of a second
+ * channel.
  */
 data class BitrateComparison(
     val frameBytes: Int,
@@ -65,6 +67,16 @@ data class Frame(
         const val HEADER_SIZE = 5 // version + lang + priority + 2-byte length
         const val PRIORITY_NORMAL = 0
         const val PRIORITY_ALERT = 1
+
+        // Control frames (empty text), not content: phone mode's mic runs continuously, so
+        // without coordination each phone transcribes and re-sends the *other* phone's own
+        // TTS playback -- a real cross-device acoustic feedback loop found via on-device
+        // testing (a two-word reply looped and audibly degraded, "what are you doing" ->
+        // "are you doing" -> "you doing", until the call was manually ended). MUTE_START/STOP
+        // let the phone about to play something tell the peer to pause listening around it.
+        const val PRIORITY_MUTE_START = 2
+        const val PRIORITY_MUTE_STOP = 3
+
         const val OPUS_VOICE_BITRATE_BPS = 16000
 
         private fun langToCode(lang: String): Int = when (lang) {

@@ -27,6 +27,7 @@ private const val TAG = "SherpaEngine"
 private const val SAMPLE_RATE = 16000
 private const val VAD_WINDOW = 512
 private const val MIN_FREE_STORAGE_MB = 100L
+private const val MAX_REMOTE_MUTE_MS = 8000L
 
 /**
  * [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
@@ -48,12 +49,15 @@ class EngineInitException(message: String) : Exception(message)
  * Wraps sherpa-onnx's VAD + STT + TTS for one language, loading models straight from the
  * app's assets (see build.gradle.kts noCompress + the models copied under src/main/assets).
  *
- * M1 scope: one phone, no networking. Push-to-talk itself is the endpointer (record while
- * held, transcribe on release) -- VAD is still real work, though: it trims leading/trailing
- * silence from the held-button recording before STT sees it, which is exactly the
- * "endpointing" job the architecture doc describes, just anchored to the button instead of
- * running hands-free. Hands-free auto-endpointing (finalizing before release) is a latency
- * optimization for a later pass, not needed for this milestone.
+ * Two capture modes, matching the PS's own "push-to-talk, or if turned off it should work
+ * like a phone" requirement:
+ *   - [startListening]/[stopListeningAndTranscribe] -- push-to-talk. The button is the
+ *     endpointer (record while held, transcribe on release); VAD still trims silence from
+ *     what was captured, it just doesn't decide when the utterance ends.
+ *   - [startPhoneMode]/[stopPhoneMode] -- continuous, hands-free. VAD itself decides
+ *     sentence boundaries (on pauses) while the mic runs continuously, and each sentence is
+ *     transcribed and handed off as soon as it's ready -- streamed one at a time, like a
+ *     live call, not batched until some later stop event.
  *
  * One language is loaded at a time (not all bundled languages held in RAM at once, per the
  * efficiency goal) -- call [init] again with a different lang to switch; it releases the
@@ -69,6 +73,47 @@ class SherpaEngine(private val context: Context) {
     private var isRecording = false
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
+
+    @Volatile
+    private var phoneModeActive = false
+    private var phoneModeRecord: AudioRecord? = null
+    private var phoneModeThread: Thread? = null
+
+    /** True while [speak] is playing audio out loud. [startPhoneMode]'s capture loop checks
+     *  this so the phone doesn't hear its own TTS playback and transcribe/re-send it back --
+     *  a real feedback-loop risk once capture is continuous instead of button-bounded. Not
+     *  relevant to push-to-talk (mic and speaker are never both live there). */
+    @Volatile
+    private var isSpeaking = false
+
+    /**
+     * True while the *other* phone has told us (via Frame.PRIORITY_MUTE_START) it's about to
+     * play something -- [isSpeaking] alone can't catch this, since it only guards a phone
+     * against hearing its *own* playback, not the peer's. Without this, phone mode's
+     * continuous mic on each phone picks up the other phone's speaker, transcribes it as new
+     * speech, and re-sends it: a real cross-device acoustic feedback loop found via on-device
+     * testing (see Frame.kt for the exact symptom). [MainActivity] calls [setRemoteMuted] when
+     * a mute control frame arrives.
+     */
+    @Volatile
+    private var remoteMuted = false
+    private var remoteMuteToken = 0
+
+    /** Called by [MainActivity] on receiving a PRIORITY_MUTE_START/STOP control frame. Also
+     *  self-clears after [MAX_REMOTE_MUTE_MS] regardless, in case the matching STOP is lost
+     *  (a dropped packet, or the peer's app dying mid-utterance) -- otherwise this phone would
+     *  stay silently deaf to real speech for the rest of the call. */
+    fun setRemoteMuted(muted: Boolean) {
+        remoteMuteToken++
+        val myToken = remoteMuteToken
+        remoteMuted = muted
+        if (muted) {
+            Thread {
+                Thread.sleep(MAX_REMOTE_MUTE_MS)
+                if (remoteMuteToken == myToken) remoteMuted = false
+            }.start()
+        }
+    }
 
     /**
      * Loads all three models from assets for [lang], releasing whatever was previously
@@ -146,6 +191,9 @@ class SherpaEngine(private val context: Context) {
 
     /** Frees whatever models are currently loaded. Safe to call when nothing is loaded. */
     fun release() {
+        // Stop phone mode first -- its capture thread reads vad/recognizer, so releasing
+        // those out from under it while it's still running would race.
+        stopPhoneMode()
         vad?.release()
         recognizer?.release()
         tts?.release()
@@ -214,16 +262,7 @@ class SherpaEngine(private val context: Context) {
         }
 
         val trimmed = trimWithVad(samples)
-        val durationSeconds = trimmed.size / SAMPLE_RATE.toFloat()
-        val rec = recognizer ?: return SttResult("", durationSeconds)
-        val stream = rec.createStream()
-        stream.acceptWaveform(trimmed, SAMPLE_RATE)
-        val t0 = System.nanoTime()
-        rec.decode(stream)
-        val decodeMs = (System.nanoTime() - t0) / 1_000_000
-        val text = rec.getResult(stream).text
-        stream.release()
-        return SttResult(text, durationSeconds, decodeMs)
+        return transcribeSegment(trimmed) ?: SttResult("", trimmed.size / SAMPLE_RATE.toFloat())
     }
 
     /**
@@ -260,6 +299,80 @@ class SherpaEngine(private val context: Context) {
     }
 
     // ---------------------------------------------------------------------
+    // STT: phone mode (continuous, hands-free -- push-to-talk turned off)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Starts continuous listening. VAD segments the stream on pauses, and each completed
+     * segment is transcribed and handed to [onSentence] immediately -- while the mic keeps
+     * running for the next one, rather than waiting for a "stop" event. Runs its own
+     * background thread; [onSentence] is called on that thread, not the caller's.
+     *
+     * Uses VOICE_COMMUNICATION (not MIC, as push-to-talk uses) so devices with hardware echo
+     * cancellation apply it to this stream -- not guaranteed on the low-end phones this
+     * targets, which is why [isSpeaking] is also checked as a software-level guard.
+     */
+    @Suppress("MissingPermission") // caller (MainActivity) checks RECORD_AUDIO first
+    fun startPhoneMode(onSentence: (SttResult) -> Unit) {
+        if (phoneModeActive) return
+        val v = vad ?: return
+        v.reset()
+        phoneModeActive = true
+
+        val minBuf = AudioRecord.getMinBufferSize(
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+        )
+        val record = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            maxOf(minBuf, VAD_WINDOW * 2) * 4,
+        )
+        phoneModeRecord = record
+        record.startRecording()
+
+        phoneModeThread = Thread {
+            val buffer = ShortArray(VAD_WINDOW)
+            while (phoneModeActive) {
+                val n = record.read(buffer, 0, buffer.size)
+                if (n <= 0 || isSpeaking || remoteMuted) continue
+                v.acceptWaveform(FloatArray(n) { buffer[it] / 32768.0f })
+                while (!v.empty()) {
+                    val segment = v.front().samples
+                    v.pop()
+                    transcribeSegment(segment)?.let(onSentence)
+                }
+            }
+        }
+        phoneModeThread?.start()
+    }
+
+    private fun transcribeSegment(segment: FloatArray): SttResult? {
+        val rec = recognizer ?: return null
+        val durationSeconds = segment.size / SAMPLE_RATE.toFloat()
+        val stream = rec.createStream()
+        stream.acceptWaveform(segment, SAMPLE_RATE)
+        val t0 = System.nanoTime()
+        rec.decode(stream)
+        val decodeMs = (System.nanoTime() - t0) / 1_000_000
+        val text = rec.getResult(stream).text
+        stream.release()
+        return if (text.isNotBlank()) SttResult(text, durationSeconds, decodeMs) else null
+    }
+
+    /** Stops continuous listening. Blocks until the capture thread has actually exited. */
+    fun stopPhoneMode() {
+        phoneModeActive = false
+        phoneModeThread?.join()
+        phoneModeThread = null
+        phoneModeRecord?.stop()
+        phoneModeRecord?.release()
+        phoneModeRecord = null
+        setRemoteMuted(false) // don't carry a stale mute into the next call
+    }
+
+    // ---------------------------------------------------------------------
     // TTS: text -> speech playback
     // ---------------------------------------------------------------------
 
@@ -273,8 +386,13 @@ class SherpaEngine(private val context: Context) {
      * ALARM stream (the one Android usage class designed to sound even through silent/DND,
      * same mechanism an alarm-clock app relies on) and forces that stream to max volume
      * first, instead of playing at whatever the media volume happens to be.
+     *
+     * [onPlaybackDone], if given, fires once playback has actually finished (not once this
+     * function returns, which is earlier -- see the isSpeaking comment below). MainActivity
+     * uses this to send a PRIORITY_MUTE_STOP to the peer at the right moment, in the two-
+     * phone echo-avoidance handshake documented on [remoteMuted].
      */
-    fun speak(text: String, alert: Boolean = false): TtsResult {
+    fun speak(text: String, alert: Boolean = false, onPlaybackDone: (() -> Unit)? = null): TtsResult {
         val t = tts ?: return TtsResult(0, 0f)
         val t0 = System.nanoTime()
         val audio = t.generate(text = text, sid = 0, speed = 1.0f)
@@ -284,8 +402,20 @@ class SherpaEngine(private val context: Context) {
             val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
         }
-        playAudio(audio.samples, audio.sampleRate, alert)
         val audioDurationSeconds = audio.samples.size / audio.sampleRate.toFloat()
+
+        // isSpeaking stays up for the audio's actual playback duration, not just until
+        // playback starts (which is when this function itself returns, matching the PS's
+        // "time until the sentence started as audio" latency metric) -- otherwise phone
+        // mode's mic would start listening again while our own voice is still audible.
+        isSpeaking = true
+        playAudio(audio.samples, audio.sampleRate, alert)
+        Thread {
+            Thread.sleep((audioDurationSeconds * 1000).toLong())
+            isSpeaking = false
+            onPlaybackDone?.invoke()
+        }.start()
+
         return TtsResult(synthMs, audioDurationSeconds)
     }
 

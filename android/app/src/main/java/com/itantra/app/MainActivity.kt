@@ -32,6 +32,10 @@ class MainActivity : AppCompatActivity() {
     private var engineReady = false
 
     private var lang = "hi"
+    private var pttMode = true
+
+    @Volatile
+    private var callActive = false
 
     private val requestMicPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -85,8 +89,22 @@ class MainActivity : AppCompatActivity() {
             Thread { transport.connectToHost(ip) }.start()
         }
 
+        binding.pttModeSwitch.setOnCheckedChangeListener { _, checked ->
+            if (callActive) endCall() // defensive; the switch is disabled during a call
+            pttMode = checked
+            binding.pttButton.text =
+                getString(if (pttMode) R.string.btn_hold_to_talk else R.string.btn_start_call)
+        }
+
         binding.pttButton.setOnTouchListener { _, event ->
             if (!engineReady) return@setOnTouchListener true
+            if (!pttMode) {
+                // Phone mode: the button is tap-to-toggle-the-call, not hold-to-talk.
+                if (event.action == MotionEvent.ACTION_DOWN) {
+                    if (callActive) endCall() else startCall()
+                }
+                return@setOnTouchListener true
+            }
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     binding.status.text = getString(R.string.status_listening)
@@ -169,14 +187,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * "Phone mode" -- push-to-talk switched off. Starts continuous, hands-free listening
+     * (SherpaEngine.startPhoneMode): each sentence VAD detects is transcribed and sent as
+     * soon as it's ready, no button hold required, same as the rest of a call.
+     */
+    private fun startCall() {
+        callActive = true
+        binding.pttButton.text = getString(R.string.btn_end_call)
+        binding.status.text = getString(R.string.status_call_listening)
+        binding.langHindiButton.isEnabled = false
+        binding.langEnglishButton.isEnabled = false
+        binding.pttModeSwitch.isEnabled = false
+        Thread {
+            engine.startPhoneMode { result ->
+                runOnUiThread { binding.recognizedText.text = result.text }
+                sendToPeer(result, System.nanoTime())
+            }
+        }.start()
+    }
+
+    private fun endCall() {
+        callActive = false
+        Thread { engine.stopPhoneMode() }.start()
+        binding.pttButton.text = getString(R.string.btn_start_call)
+        binding.status.text = getString(R.string.status_ready)
+        binding.langHindiButton.isEnabled = true
+        binding.langEnglishButton.isEnabled = true
+        binding.pttModeSwitch.isEnabled = true
+    }
+
     private fun formatBytes(bytes: Int): String =
         if (bytes >= 1024) "%.1f KB".format(bytes / 1024f) else "$bytes B"
 
     /** A frame arrived from the peer: show it, and speak it -- this is the point of M2.
      *  An alert-tagged frame speaks through [SherpaEngine.speak]'s alert path (max volume,
      *  bypasses silent/DND) and gets a visible marker here too. Also the other half of M4's
-     *  latency picture: how long after the frame arrived until it's actually audible. */
+     *  latency picture: how long after the frame arrived until it's actually audible.
+     *
+     *  Mute control frames (phone mode's echo-avoidance handshake, see Frame.kt) are handled
+     *  and returned on immediately -- they're plumbing, never shown or spoken. */
     private fun handleReceivedFrame(frame: Frame) {
+        when (frame.priority) {
+            Frame.PRIORITY_MUTE_START -> { engine.setRemoteMuted(true); return }
+            Frame.PRIORITY_MUTE_STOP -> { engine.setRemoteMuted(false); return }
+        }
+
         val arrivalTime = System.nanoTime()
         val isAlert = frame.priority == Frame.PRIORITY_ALERT
         binding.receivedText.text =
@@ -184,7 +240,15 @@ class MainActivity : AppCompatActivity() {
         if (engineReady) {
             binding.status.text = getString(R.string.status_speaking)
             Thread {
-                val result = engine.speak(frame.text, alert = isAlert)
+                // Tell the peer to pause its (phone mode) mic before we start playing --
+                // otherwise, if the two phones are near each other, its mic hears our
+                // speaker and transcribes/re-sends our own message back to us. Sent as its
+                // own frame rather than folded into this one since the peer needs to know
+                // *before* playback starts, not after this message is already speaking.
+                transport.send(Frame(lang = lang, priority = Frame.PRIORITY_MUTE_START, text = ""))
+                val result = engine.speak(frame.text, alert = isAlert, onPlaybackDone = {
+                    transport.send(Frame(lang = lang, priority = Frame.PRIORITY_MUTE_STOP, text = ""))
+                })
                 val speakLatencyMs = (System.nanoTime() - arrivalTime) / 1_000_000
                 runOnUiThread {
                     binding.status.text = getString(R.string.status_ready)
@@ -279,6 +343,7 @@ class MainActivity : AppCompatActivity() {
                     binding.retryButton.visibility = View.VISIBLE
                     binding.langHindiButton.isEnabled = true
                     binding.langEnglishButton.isEnabled = true
+                    binding.pttModeSwitch.isEnabled = true
                 }
             }
         }.start()
@@ -289,6 +354,7 @@ class MainActivity : AppCompatActivity() {
         binding.speakButton.isEnabled = enabled
         binding.langHindiButton.isEnabled = enabled
         binding.langEnglishButton.isEnabled = enabled
+        binding.pttModeSwitch.isEnabled = enabled
     }
 
     override fun onDestroy() {

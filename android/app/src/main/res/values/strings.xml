@@ -15,6 +15,10 @@
     <string name="lang_english">English</string>
 
     <string name="btn_hold_to_talk">Hold to talk</string>
+    <string name="label_ptt_mode">Push-to-talk (off = phone mode, hands-free)</string>
+    <string name="btn_start_call">📞 Tap to start call</string>
+    <string name="btn_end_call">🔴 Tap to end call</string>
+    <string name="status_call_listening">On call — listening…</string>
     <string name="label_recognized_text">Recognized text (sent to peer)</string>
     <string name="label_received_text">Received from peer (spoken automatically)</string>
     <string name="placeholder_stt_idle">(nothing yet)</string>
@@ -43,6 +47,6 @@
     <string name="bitrate_stats">Sent %1$d bytes — a voice note of the same length would be ~%2$s (%3$.0fx smaller)</string>
     <string name="alert_received_prefix">🚨 ALERT: %1$s</string>
 
-    <string name="perf_stt">STT: %1$dms decode (RTF %2$.2f) · sent %3$dms after release</string>
+    <string name="perf_stt">STT: %1$dms decode (RTF %2$.2f) · %3$dms to send</string>
     <string name="perf_tts">TTS: %1$dms synth (RTF %2$.2f) · spoken %3$dms after arrival</string>
 </resources>
