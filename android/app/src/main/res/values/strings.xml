@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">iTantra</string>
+
+    <string name="status_ready">Ready — hold the button and speak</string>
+    <string name="status_listening">Listening…</string>
+    <string name="status_mic_denied">Microphone permission denied — push-to-talk needs it</string>
+
+    <string name="btn_hold_to_talk">Hold to talk</string>
+    <string name="label_recognized_text">Recognized text</string>
+    <string name="placeholder_stt_idle">(nothing yet)</string>
+    <string name="placeholder_stt_pending">…</string>
+
+    <string name="hint_speak_input">Type text to synthesize</string>
+    <string name="btn_speak">Speak</string>
+    <string name="toast_enter_text">Type something first</string>
+    <string name="toast_tts_stub">TTS not wired up yet — would speak: “%1$s”</string>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Placeholder mark: a mic body + broadcast waves, well within the 66dp adaptive-icon
+         safe zone. Swap for a real design later; not load-bearing for M1. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,38 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,46 h8 v14 a4,4 0 0,1 -8,0 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,64 h12 v3 h-12 z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:pathData="M38,42 a20,20 0 0,0 0,20" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:pathData="M70,42 a20,20 0 0,1 0,20" />
+</vector>

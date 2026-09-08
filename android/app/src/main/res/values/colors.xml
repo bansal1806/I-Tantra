@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="itantra_primary">#1B5E20</color>
+    <color name="itantra_primary_dark">#0F3D14</color>
+    <color name="itantra_accent">#FF6F00</color>
+</resources>

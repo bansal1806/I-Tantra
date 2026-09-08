@@ -24,3 +24,4 @@ android/.cxx/
 # Misc
 .DS_Store
 Thumbs.db
+.claude/
