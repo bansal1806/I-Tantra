@@ -22,8 +22,19 @@ extreme semantic codec: throw away the waveform, keep the meaning, resynthesize 
 
 **M0 (desktop spike) is done.** `desktop-spike/roundtrip_test.py` runs the whole loop —
 text → TTS → wav → VAD → STT → text — for Hindi and English, fully offline, and both come back
-100% correct. M1 (Android) is next. MVP scope is Hindi + English; more languages follow once the
-core loop is solid on real phones.
+100% correct.
+
+**M1 (Android, single phone) is code-complete for Hindi, not yet verified on hardware.**
+The app has a real push-to-talk loop (SherpaEngine.kt wires up sherpa-onnx's VAD + STT + TTS,
+no more stubs) and `gradlew assembleDebug` builds a working APK, but no Android device has been
+connected in this environment yet to confirm it actually runs correctly end-to-end on a phone.
+English is the immediate next step once Hindi is confirmed working on real hardware.
+
+### Try it on your phone
+
+1. Enable Developer Options + USB debugging on the phone, connect it via USB.
+2. From `android/`: `gradlew.bat installDebug` (or open the project in Android Studio and hit Run).
+3. Grant the mic permission when prompted, wait for "Ready", hold the button and speak Hindi.
 
 ### Quickstart (M0)
 
