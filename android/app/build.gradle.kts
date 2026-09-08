@@ -17,6 +17,15 @@ android {
         versionName = "0.1.0-m1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The sherpa-onnx AAR ships native .so for 4 ABIs; every real device we've tested
+        // on (and the overwhelming majority of Android phones in the field today) is
+        // arm64-v8a. Bundling armeabi-v7a/x86/x86_64 too was pure dead weight -- roughly
+        // doubled the APK for architectures nothing we're targeting actually uses. M4
+        // efficiency pass: restrict to what's real.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildTypes {

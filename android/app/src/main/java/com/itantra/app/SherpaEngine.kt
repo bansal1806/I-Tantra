@@ -27,9 +27,17 @@ private const val TAG = "SherpaEngine"
 private const val SAMPLE_RATE = 16000
 private const val VAD_WINDOW = 512
 
-/** [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
- *  length, used to compute the "equivalent voice-note size" bitrate comparison (M3). */
-data class SttResult(val text: String, val durationSeconds: Float)
+/**
+ * [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
+ * length (used for M3's "equivalent voice-note size" bitrate comparison); [decodeMs] is how
+ * long the STT model itself took, i.e. real-time factor = decodeMs / (durationSeconds*1000)
+ * -- the M4 latency number the rubric weights explicitly.
+ */
+data class SttResult(val text: String, val durationSeconds: Float, val decodeMs: Long = 0)
+
+/** [synthMs] is how long TTS synthesis took; [audioDurationSeconds] is the produced audio's
+ *  length, so RTF = synthMs / (audioDurationSeconds*1000), same idea as [SttResult]. */
+data class TtsResult(val synthMs: Long, val audioDurationSeconds: Float)
 
 /**
  * Wraps sherpa-onnx's VAD + STT + TTS for one language, loading models straight from the
@@ -188,10 +196,12 @@ class SherpaEngine(private val context: Context) {
         val rec = recognizer ?: return SttResult("", durationSeconds)
         val stream = rec.createStream()
         stream.acceptWaveform(trimmed, SAMPLE_RATE)
+        val t0 = System.nanoTime()
         rec.decode(stream)
+        val decodeMs = (System.nanoTime() - t0) / 1_000_000
         val text = rec.getResult(stream).text
         stream.release()
-        return SttResult(text, durationSeconds)
+        return SttResult(text, durationSeconds, decodeMs)
     }
 
     /**
@@ -242,15 +252,19 @@ class SherpaEngine(private val context: Context) {
      * same mechanism an alarm-clock app relies on) and forces that stream to max volume
      * first, instead of playing at whatever the media volume happens to be.
      */
-    fun speak(text: String, alert: Boolean = false) {
-        val t = tts ?: return
+    fun speak(text: String, alert: Boolean = false): TtsResult {
+        val t = tts ?: return TtsResult(0, 0f)
+        val t0 = System.nanoTime()
         val audio = t.generate(text = text, sid = 0, speed = 1.0f)
+        val synthMs = (System.nanoTime() - t0) / 1_000_000
         if (alert) {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
         }
         playAudio(audio.samples, audio.sampleRate, alert)
+        val audioDurationSeconds = audio.samples.size / audio.sampleRate.toFloat()
+        return TtsResult(synthMs, audioDurationSeconds)
     }
 
     private fun playAudio(samples: FloatArray, sampleRate: Int, alert: Boolean) {

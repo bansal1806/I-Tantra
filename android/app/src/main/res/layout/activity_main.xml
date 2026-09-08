@@ -186,6 +186,18 @@
             tools:text="Sent 42 bytes — a voice note of the same length would be ~5.2 KB (124x smaller)"
             tools:visibility="visible" />
 
+        <!-- M4: latency/RTF numbers, live off the real pipeline instead of a one-off
+             benchmark: true every time you actually use the app, not just in a lab run. -->
+        <TextView
+            android:id="@+id/sttPerfStats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textStyle="italic"
+            android:visibility="gone"
+            tools:text="STT: 180ms decode (RTF 0.09) · sent 210ms after release"
+            tools:visibility="visible" />
+
         <TextView
             android:id="@+id/receivedLabel"
             android:layout_width="wrap_content"
@@ -201,6 +213,17 @@
             android:layout_marginTop="4dp"
             android:minHeight="48dp"
             android:text="@string/placeholder_stt_idle" />
+
+        <TextView
+            android:id="@+id/ttsPerfStats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp"
+            android:textStyle="italic"
+            android:visibility="gone"
+            tools:text="TTS: 340ms synth (RTF 0.15) · spoken 360ms after arrival"
+            tools:visibility="visible" />
 
         <!-- Text -> speech: TTS direction. Also what plays automatically when a frame
              arrives from the peer over the transport. -->

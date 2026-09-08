@@ -93,6 +93,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     binding.status.text = getString(R.string.status_transcribing)
+                    val releaseTime = System.nanoTime()
                     Thread {
                         val result = engine.stopListeningAndTranscribe()
                         runOnUiThread {
@@ -100,7 +101,7 @@ class MainActivity : AppCompatActivity() {
                                 result.text.ifBlank { getString(R.string.placeholder_stt_idle) }
                             binding.status.text = getString(R.string.status_ready)
                         }
-                        if (result.text.isNotBlank()) sendToPeer(result.text, result.durationSeconds)
+                        if (result.text.isNotBlank()) sendToPeer(result, releaseTime)
                     }.start()
                     true
                 }
@@ -116,22 +117,35 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             binding.status.text = getString(R.string.status_speaking)
+            val clickTime = System.nanoTime()
             Thread {
-                engine.speak(text)
-                runOnUiThread { binding.status.text = getString(R.string.status_ready) }
+                val result = engine.speak(text)
+                val speakLatencyMs = (System.nanoTime() - clickTime) / 1_000_000
+                runOnUiThread {
+                    binding.status.text = getString(R.string.status_ready)
+                    val ttsRtf = if (result.audioDurationSeconds > 0) {
+                        result.synthMs / (result.audioDurationSeconds * 1000)
+                    } else 0f
+                    binding.ttsPerfStats.text =
+                        getString(R.string.perf_tts, result.synthMs, ttsRtf, speakLatencyMs)
+                    binding.ttsPerfStats.visibility = View.VISIBLE
+                }
             }.start()
         }
     }
 
-    /** Sends [text] (in the currently active [lang], spoken over [durationSeconds]) to the
-     *  connected peer, if any -- tagged as an alert if that toggle is on. */
-    private fun sendToPeer(text: String, durationSeconds: Float) {
+    /** Sends [result] (in the currently active [lang]) to the connected peer, if any --
+     *  tagged as an alert if that toggle is on. [releaseTime] (System.nanoTime() at
+     *  button-up) anchors the M4 "how long after you stopped talking did this actually go
+     *  out" latency number. */
+    private fun sendToPeer(result: SttResult, releaseTime: Long) {
         val priority = if (binding.alertToggle.isChecked) Frame.PRIORITY_ALERT else Frame.PRIORITY_NORMAL
-        val frame = Frame(lang = lang, priority = priority, text = text)
+        val frame = Frame(lang = lang, priority = priority, text = result.text)
         val sent = transport.send(frame)
+        val sendLatencyMs = (System.nanoTime() - releaseTime) / 1_000_000
         runOnUiThread {
             if (sent) {
-                val cmp = frame.bitrateComparison(durationSeconds)
+                val cmp = frame.bitrateComparison(result.durationSeconds)
                 binding.bitrateStats.text = getString(
                     R.string.bitrate_stats,
                     cmp.frameBytes,
@@ -139,6 +153,13 @@ class MainActivity : AppCompatActivity() {
                     cmp.compressionRatio,
                 )
                 binding.bitrateStats.visibility = View.VISIBLE
+
+                val sttRtf = if (result.durationSeconds > 0) {
+                    result.decodeMs / (result.durationSeconds * 1000)
+                } else 0f
+                binding.sttPerfStats.text =
+                    getString(R.string.perf_stt, result.decodeMs, sttRtf, sendLatencyMs)
+                binding.sttPerfStats.visibility = View.VISIBLE
             } else {
                 Toast.makeText(this, R.string.toast_send_failed, Toast.LENGTH_SHORT).show()
             }
@@ -150,16 +171,27 @@ class MainActivity : AppCompatActivity() {
 
     /** A frame arrived from the peer: show it, and speak it -- this is the point of M2.
      *  An alert-tagged frame speaks through [SherpaEngine.speak]'s alert path (max volume,
-     *  bypasses silent/DND) and gets a visible marker here too. */
+     *  bypasses silent/DND) and gets a visible marker here too. Also the other half of M4's
+     *  latency picture: how long after the frame arrived until it's actually audible. */
     private fun handleReceivedFrame(frame: Frame) {
+        val arrivalTime = System.nanoTime()
         val isAlert = frame.priority == Frame.PRIORITY_ALERT
         binding.receivedText.text =
             if (isAlert) getString(R.string.alert_received_prefix, frame.text) else frame.text
         if (engineReady) {
             binding.status.text = getString(R.string.status_speaking)
             Thread {
-                engine.speak(frame.text, alert = isAlert)
-                runOnUiThread { binding.status.text = getString(R.string.status_ready) }
+                val result = engine.speak(frame.text, alert = isAlert)
+                val speakLatencyMs = (System.nanoTime() - arrivalTime) / 1_000_000
+                runOnUiThread {
+                    binding.status.text = getString(R.string.status_ready)
+                    val ttsRtf = if (result.audioDurationSeconds > 0) {
+                        result.synthMs / (result.audioDurationSeconds * 1000)
+                    } else 0f
+                    binding.ttsPerfStats.text =
+                        getString(R.string.perf_tts, result.synthMs, ttsRtf, speakLatencyMs)
+                    binding.ttsPerfStats.visibility = View.VISIBLE
+                }
             }.start()
         }
     }
