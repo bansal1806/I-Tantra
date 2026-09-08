@@ -16,6 +16,12 @@ import java.nio.charset.StandardCharsets
  * a spoken sentence, vs. kilobytes for even a well-compressed voice note. `priority` is
  * reserved as 0 (normal) for now; M3 uses it for the alert side-channel.
  */
+data class BitrateComparison(
+    val frameBytes: Int,
+    val equivalentVoiceNoteBytes: Int,
+    val compressionRatio: Float,
+)
+
 data class Frame(
     val lang: String,
     val priority: Int = PRIORITY_NORMAL,
@@ -25,6 +31,24 @@ data class Frame(
      *  bitrate showcase (M3) will put next to an equivalent voice-note size. */
     val byteSize: Int
         get() = HEADER_SIZE + text.toByteArray(StandardCharsets.UTF_8).size
+
+    /**
+     * M3's "how small is this really" showcase: what actually crossed the wire (this frame)
+     * vs. what the same [durationSeconds] of speech would have cost as a compressed voice
+     * note at a realistic Opus bitrate (16kbps -- squarely in the ~6-24kbps range voice
+     * apps like WhatsApp actually use; see docs/architecture.md). This is the number the
+     * whole project is about.
+     */
+    fun bitrateComparison(durationSeconds: Float): BitrateComparison {
+        val equivalentBytes = (durationSeconds * OPUS_VOICE_BITRATE_BPS / 8f)
+            .toInt()
+            .coerceAtLeast(1)
+        return BitrateComparison(
+            frameBytes = byteSize,
+            equivalentVoiceNoteBytes = equivalentBytes,
+            compressionRatio = equivalentBytes.toFloat() / byteSize,
+        )
+    }
 
     fun writeTo(out: DataOutputStream) {
         val textBytes = text.toByteArray(StandardCharsets.UTF_8)
@@ -41,6 +65,7 @@ data class Frame(
         const val HEADER_SIZE = 5 // version + lang + priority + 2-byte length
         const val PRIORITY_NORMAL = 0
         const val PRIORITY_ALERT = 1
+        const val OPUS_VOICE_BITRATE_BPS = 16000
 
         private fun langToCode(lang: String): Int = when (lang) {
             "hi" -> 0

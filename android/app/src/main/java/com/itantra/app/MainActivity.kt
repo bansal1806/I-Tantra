@@ -1,11 +1,8 @@
 package com.itantra.app
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
-import android.net.wifi.WifiManager
 import android.os.Bundle
-import android.text.format.Formatter
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
@@ -13,6 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.itantra.app.databinding.ActivityMainBinding
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.util.Collections
 
 /**
  * M1+M2: push-to-talk on one phone (speech in -> recognized text; typed text in -> spoken
@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
 
         engine = SherpaEngine(applicationContext)
         transport = Transport(
+            context = applicationContext,
             onStateChanged = { state -> runOnUiThread { renderConnectionState(state) } },
             onFrameReceived = { frame -> runOnUiThread { handleReceivedFrame(frame) } },
         )
@@ -93,13 +94,13 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     binding.status.text = getString(R.string.status_transcribing)
                     Thread {
-                        val text = engine.stopListeningAndTranscribe()
+                        val result = engine.stopListeningAndTranscribe()
                         runOnUiThread {
                             binding.recognizedText.text =
-                                text.ifBlank { getString(R.string.placeholder_stt_idle) }
+                                result.text.ifBlank { getString(R.string.placeholder_stt_idle) }
                             binding.status.text = getString(R.string.status_ready)
                         }
-                        if (text.isNotBlank()) sendToPeer(text)
+                        if (result.text.isNotBlank()) sendToPeer(result.text, result.durationSeconds)
                     }.start()
                     true
                 }
@@ -122,24 +123,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Sends [text] (in the currently active [lang]) to the connected peer, if any. */
-    private fun sendToPeer(text: String) {
-        val frame = Frame(lang = lang, text = text)
+    /** Sends [text] (in the currently active [lang], spoken over [durationSeconds]) to the
+     *  connected peer, if any -- tagged as an alert if that toggle is on. */
+    private fun sendToPeer(text: String, durationSeconds: Float) {
+        val priority = if (binding.alertToggle.isChecked) Frame.PRIORITY_ALERT else Frame.PRIORITY_NORMAL
+        val frame = Frame(lang = lang, priority = priority, text = text)
         val sent = transport.send(frame)
         runOnUiThread {
-            val msgRes = if (sent) R.string.toast_sent else R.string.toast_send_failed
-            val msg = if (sent) getString(msgRes, frame.byteSize) else getString(msgRes)
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            if (sent) {
+                val cmp = frame.bitrateComparison(durationSeconds)
+                binding.bitrateStats.text = getString(
+                    R.string.bitrate_stats,
+                    cmp.frameBytes,
+                    formatBytes(cmp.equivalentVoiceNoteBytes),
+                    cmp.compressionRatio,
+                )
+                binding.bitrateStats.visibility = View.VISIBLE
+            } else {
+                Toast.makeText(this, R.string.toast_send_failed, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
-    /** A frame arrived from the peer: show it, and speak it -- this is the point of M2. */
+    private fun formatBytes(bytes: Int): String =
+        if (bytes >= 1024) "%.1f KB".format(bytes / 1024f) else "$bytes B"
+
+    /** A frame arrived from the peer: show it, and speak it -- this is the point of M2.
+     *  An alert-tagged frame speaks through [SherpaEngine.speak]'s alert path (max volume,
+     *  bypasses silent/DND) and gets a visible marker here too. */
     private fun handleReceivedFrame(frame: Frame) {
-        binding.receivedText.text = frame.text
+        val isAlert = frame.priority == Frame.PRIORITY_ALERT
+        binding.receivedText.text =
+            if (isAlert) getString(R.string.alert_received_prefix, frame.text) else frame.text
         if (engineReady) {
             binding.status.text = getString(R.string.status_speaking)
             Thread {
-                engine.speak(frame.text)
+                engine.speak(frame.text, alert = isAlert)
                 runOnUiThread { binding.status.text = getString(R.string.status_ready) }
             }.start()
         }
@@ -150,16 +169,29 @@ class MainActivity : AppCompatActivity() {
             ConnectionState.DISCONNECTED -> getString(R.string.conn_not_connected)
             ConnectionState.LISTENING -> getString(R.string.conn_listening, localIpAddress() ?: "?")
             ConnectionState.CONNECTING -> getString(R.string.conn_connecting)
-            ConnectionState.CONNECTED -> getString(R.string.conn_connected, localIpAddress() ?: "peer")
+            ConnectionState.CONNECTED -> getString(R.string.conn_connected, transport.remoteAddress ?: "peer")
         }
     }
 
+    /**
+     * WifiManager.connectionInfo (the "obvious" API for this) only reflects Wi-Fi *client*
+     * mode -- it returns nothing useful when this phone is itself the hotspot (the Host
+     * role), which is exactly the case that needs this most: showing the IP the other phone
+     * should type in. Scanning interfaces directly works for both roles.
+     */
     private fun localIpAddress(): String? {
-        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            ?: return null
-        val ipInt = wifiManager.connectionInfo?.ipAddress ?: return null
-        if (ipInt == 0) return null
-        return Formatter.formatIpAddress(ipInt)
+        return try {
+            val candidates = Collections.list(NetworkInterface.getNetworkInterfaces())
+                .filter { it.isUp && !it.isLoopback }
+                .flatMap { iface -> Collections.list(iface.inetAddresses).map { iface.name to it } }
+                .filter { (_, addr) -> addr is Inet4Address && !addr.isLoopbackAddress }
+            // Prefer a wlan*-named interface (Wi-Fi client or hotspot AP) over anything else
+            // (e.g. rmnet* mobile data) -- that's the network the other phone can reach.
+            val wifi = candidates.firstOrNull { (name, _) -> name.contains("wlan", ignoreCase = true) }
+            (wifi ?: candidates.firstOrNull())?.second?.hostAddress
+        } catch (ex: Exception) {
+            null
+        }
     }
 
     private fun ensureMicPermission() {

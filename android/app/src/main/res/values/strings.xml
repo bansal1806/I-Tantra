@@ -34,6 +34,9 @@
     <string name="conn_connected">Connected to %1$s — messages will be sent live</string>
     <string name="conn_disconnected">Disconnected</string>
     <string name="toast_enter_host_ip">Enter the host\'s IP address first</string>
-    <string name="toast_sent">Sent (%1$d bytes)</string>
     <string name="toast_send_failed">Not connected — not sent</string>
+
+    <string name="label_send_as_alert">🚨 Send as ALERT (max volume, bypasses silent mode)</string>
+    <string name="bitrate_stats">Sent %1$d bytes — a voice note of the same length would be ~%2$s (%3$.0fx smaller)</string>
+    <string name="alert_received_prefix">🚨 ALERT: %1$s</string>
 </resources>

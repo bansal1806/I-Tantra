@@ -1,5 +1,9 @@
 package com.itantra.app
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.util.Log
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -23,6 +27,7 @@ enum class ConnectionState { DISCONNECTED, LISTENING, CONNECTING, CONNECTED }
  * the link is symmetric -- either side can call [send]; both run a receive loop.
  */
 class Transport(
+    private val context: Context,
     private val onStateChanged: (ConnectionState) -> Unit,
     private val onFrameReceived: (Frame) -> Unit,
 ) {
@@ -37,6 +42,11 @@ class Transport(
     private var socket: Socket? = null
     private var output: DataOutputStream? = null
     private val writeLock = Any()
+
+    /** The connected peer's address, once [state] is CONNECTED; null otherwise. */
+    @Volatile
+    var remoteAddress: String? = null
+        private set
 
     /** Starts listening for one peer to connect. Call off the main thread. */
     fun startHost() {
@@ -59,6 +69,12 @@ class Transport(
         state = ConnectionState.CONNECTING
         try {
             val client = Socket()
+            // If the phone also has mobile data up, Android's default-network routing can
+            // send this connection attempt out over data instead of Wi-Fi (silently, no
+            // error until it times out trying to reach a private IP that isn't reachable
+            // that way) -- happened during testing. Binding explicitly to the Wi-Fi network
+            // makes this connection use it regardless of what the OS would otherwise prefer.
+            activeWifiNetwork()?.bindSocket(client)
             client.connect(InetSocketAddress(hostIp, TRANSPORT_PORT), 8000)
             attach(client)
         } catch (ex: IOException) {
@@ -67,11 +83,20 @@ class Transport(
         }
     }
 
+    private fun activeWifiNetwork(): Network? {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return null
+        return cm.allNetworks.firstOrNull { network ->
+            cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        }
+    }
+
     private fun attach(client: Socket) {
         socket = client
         output = DataOutputStream(client.getOutputStream())
+        remoteAddress = client.inetAddress?.hostAddress
         state = ConnectionState.CONNECTED
-        Log.i(TAG, "Connected to ${client.inetAddress?.hostAddress}")
+        Log.i(TAG, "Connected to $remoteAddress")
 
         val input = DataInputStream(client.getInputStream())
         try {
@@ -113,6 +138,7 @@ class Transport(
         socket = null
         output = null
         serverSocket = null
+        remoteAddress = null
         state = ConnectionState.DISCONNECTED
     }
 }

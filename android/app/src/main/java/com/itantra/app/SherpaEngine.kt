@@ -1,7 +1,9 @@
 package com.itantra.app
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
@@ -24,6 +26,10 @@ import java.io.IOException
 private const val TAG = "SherpaEngine"
 private const val SAMPLE_RATE = 16000
 private const val VAD_WINDOW = 512
+
+/** [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
+ *  length, used to compute the "equivalent voice-note size" bitrate comparison (M3). */
+data class SttResult(val text: String, val durationSeconds: Float)
 
 /**
  * Wraps sherpa-onnx's VAD + STT + TTS for one language, loading models straight from the
@@ -161,7 +167,7 @@ class SherpaEngine(private val context: Context) {
     private var pendingChunks: List<FloatArray> = emptyList()
 
     /** Stops recording and runs VAD-trimmed STT on whatever was captured. Call on button-up. */
-    fun stopListeningAndTranscribe(): String {
+    fun stopListeningAndTranscribe(): SttResult {
         isRecording = false
         recordingThread?.join()
         audioRecord?.stop()
@@ -169,7 +175,7 @@ class SherpaEngine(private val context: Context) {
         audioRecord = null
 
         val total = pendingChunks.sumOf { it.size }
-        if (total == 0) return ""
+        if (total == 0) return SttResult("", 0f)
         val samples = FloatArray(total)
         var offset = 0
         for (chunk in pendingChunks) {
@@ -178,13 +184,14 @@ class SherpaEngine(private val context: Context) {
         }
 
         val trimmed = trimWithVad(samples)
-        val rec = recognizer ?: return ""
+        val durationSeconds = trimmed.size / SAMPLE_RATE.toFloat()
+        val rec = recognizer ?: return SttResult("", durationSeconds)
         val stream = rec.createStream()
         stream.acceptWaveform(trimmed, SAMPLE_RATE)
         rec.decode(stream)
         val text = rec.getResult(stream).text
         stream.release()
-        return text
+        return SttResult(text, durationSeconds)
     }
 
     /**
@@ -224,18 +231,38 @@ class SherpaEngine(private val context: Context) {
     // TTS: text -> speech playback
     // ---------------------------------------------------------------------
 
-    /** Synthesizes and plays [text]. Blocks until synthesis is done and playback is queued. */
-    fun speak(text: String) {
+    /**
+     * Synthesizes and plays [text]. Blocks until synthesis is done and playback is queued
+     * (there's no stop/cancel control anywhere in the UI, so playback is non-interruptible
+     * by construction -- that's part of what the PS asks for alert messages specifically,
+     * and it costs nothing extra to also be true for normal ones).
+     *
+     * [alert] is the other half of the PS's alert requirement: routes audio through the
+     * ALARM stream (the one Android usage class designed to sound even through silent/DND,
+     * same mechanism an alarm-clock app relies on) and forces that stream to max volume
+     * first, instead of playing at whatever the media volume happens to be.
+     */
+    fun speak(text: String, alert: Boolean = false) {
         val t = tts ?: return
         val audio = t.generate(text = text, sid = 0, speed = 1.0f)
-        playAudio(audio.samples, audio.sampleRate)
+        if (alert) {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
+        }
+        playAudio(audio.samples, audio.sampleRate, alert)
     }
 
-    private fun playAudio(samples: FloatArray, sampleRate: Int) {
+    private fun playAudio(samples: FloatArray, sampleRate: Int, alert: Boolean) {
         val minBuf = AudioTrack.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT
         )
+        val attributes = AudioAttributes.Builder()
+            .setUsage(if (alert) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
         val track = AudioTrack.Builder()
+            .setAudioAttributes(attributes)
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
