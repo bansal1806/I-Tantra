@@ -3,6 +3,7 @@ package com.itantra.app
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
@@ -56,6 +57,8 @@ class MainActivity : AppCompatActivity() {
 
         setControlsEnabled(false)
         ensureMicPermission()
+
+        binding.retryButton.setOnClickListener { loadEngine() }
 
         binding.langToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
@@ -196,7 +199,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @Volatile
+    private var wasConnected = false
+
     private fun renderConnectionState(state: ConnectionState) {
+        // A dropped connection used to look identical to "never connected" -- same "Not
+        // connected" text -- which is confusing mid-demo (was that peer's app killed? did
+        // Wi-Fi drop? did I just never connect?). Call it out once, specifically, and point
+        // at the fix (both roles already support it: tap Host/Join again).
+        if (state == ConnectionState.DISCONNECTED && wasConnected) {
+            Toast.makeText(this, R.string.toast_peer_disconnected, Toast.LENGTH_LONG).show()
+        }
+        wasConnected = state == ConnectionState.CONNECTED
+
         binding.connectionStatus.text = when (state) {
             ConnectionState.DISCONNECTED -> getString(R.string.conn_not_connected)
             ConnectionState.LISTENING -> getString(R.string.conn_listening, localIpAddress() ?: "?")
@@ -243,13 +258,28 @@ class MainActivity : AppCompatActivity() {
     private fun loadEngine() {
         engineReady = false
         setControlsEnabled(false)
+        binding.retryButton.visibility = View.GONE
         binding.status.text = getString(R.string.status_loading_models)
         Thread {
-            engine.init(lang)
-            engineReady = true
-            runOnUiThread {
-                binding.status.text = getString(R.string.status_ready)
-                setControlsEnabled(true)
+            try {
+                engine.init(lang)
+                engineReady = true
+                runOnUiThread {
+                    binding.status.text = getString(R.string.status_ready)
+                    setControlsEnabled(true)
+                }
+            } catch (ex: Exception) {
+                // A native model-load failure (low storage, corrupt asset, OOM) used to mean
+                // the app sat stuck with everything disabled and no explanation. Now it's a
+                // visible error with a way to try again instead of a silent dead end.
+                Log.e("MainActivity", "engine.init failed for lang=$lang", ex)
+                runOnUiThread {
+                    binding.status.text =
+                        getString(R.string.status_engine_error, ex.message ?: ex.toString())
+                    binding.retryButton.visibility = View.VISIBLE
+                    binding.langHindiButton.isEnabled = true
+                    binding.langEnglishButton.isEnabled = true
+                }
             }
         }.start()
     }

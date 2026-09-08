@@ -26,6 +26,7 @@ import java.io.IOException
 private const val TAG = "SherpaEngine"
 private const val SAMPLE_RATE = 16000
 private const val VAD_WINDOW = 512
+private const val MIN_FREE_STORAGE_MB = 100L
 
 /**
  * [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
@@ -38,6 +39,10 @@ data class SttResult(val text: String, val durationSeconds: Float, val decodeMs:
 /** [synthMs] is how long TTS synthesis took; [audioDurationSeconds] is the produced audio's
  *  length, so RTF = synthMs / (audioDurationSeconds*1000), same idea as [SttResult]. */
 data class TtsResult(val synthMs: Long, val audioDurationSeconds: Float)
+
+/** Thrown by [SherpaEngine.init] on a problem worth telling the user about directly
+ *  (rather than a native crash with an opaque message) -- currently just low storage. */
+class EngineInitException(message: String) : Exception(message)
 
 /**
  * Wraps sherpa-onnx's VAD + STT + TTS for one language, loading models straight from the
@@ -68,9 +73,15 @@ class SherpaEngine(private val context: Context) {
     /**
      * Loads all three models from assets for [lang], releasing whatever was previously
      * loaded first. Call off the main thread -- this takes real time.
+     *
+     * Throws [EngineInitException] on a low-storage precondition failure (extracting
+     * espeak-ng-data onto real disk needs headroom; running out mid-extraction previously
+     * meant a native crash with an opaque message instead of a clear one), or whatever
+     * exception sherpa-onnx's native loaders throw for anything else that goes wrong.
      */
     fun init(lang: String) {
         release()
+        checkStorageHeadroom()
         val assets = context.assets
 
         vad = Vad(
@@ -120,6 +131,17 @@ class SherpaEngine(private val context: Context) {
             ),
         )
         Log.i(TAG, "SherpaEngine ready for lang=$lang")
+    }
+
+    private fun checkStorageHeadroom() {
+        val dir = context.getExternalFilesDir(null) ?: return
+        val usableMb = dir.usableSpace / (1024 * 1024)
+        if (usableMb < MIN_FREE_STORAGE_MB) {
+            throw EngineInitException(
+                "Only ${usableMb}MB free storage -- need at least ${MIN_FREE_STORAGE_MB}MB " +
+                    "to extract TTS data. Free up space and try again."
+            )
+        }
     }
 
     /** Frees whatever models are currently loaded. Safe to call when nothing is loaded. */

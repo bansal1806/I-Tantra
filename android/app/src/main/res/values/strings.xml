@@ -8,6 +8,8 @@
     <string name="status_speaking">Speaking…</string>
     <string name="status_loading_models">Loading models…</string>
     <string name="status_mic_denied">Microphone permission denied — push-to-talk needs it</string>
+    <string name="status_engine_error">Couldn\'t load: %1$s</string>
+    <string name="btn_retry">Retry</string>
 
     <string name="lang_hindi">हिंदी</string>
     <string name="lang_english">English</string>
@@ -33,6 +35,7 @@
     <string name="conn_connecting">Connecting…</string>
     <string name="conn_connected">Connected to %1$s — messages will be sent live</string>
     <string name="conn_disconnected">Disconnected</string>
+    <string name="toast_peer_disconnected">Peer disconnected — tap Host or Join to reconnect</string>
     <string name="toast_enter_host_ip">Enter the host\'s IP address first</string>
     <string name="toast_send_failed">Not connected — not sent</string>
 

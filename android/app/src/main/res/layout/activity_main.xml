@@ -29,6 +29,17 @@
             android:textColor="?attr/colorPrimary"
             tools:text="Ready" />
 
+        <!-- Only shown if SherpaEngine.init fails (e.g. low storage): a clear recovery
+             path instead of the app just sitting stuck with disabled controls. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/retryButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/btn_retry"
+            android:visibility="gone" />
+
         <!-- Language toggle: switches which model set SherpaEngine has loaded. Only one
              language's models are ever held in RAM at a time (see SherpaEngine.init). -->
         <com.google.android.material.button.MaterialButtonToggleGroup
