@@ -51,12 +51,16 @@ Get-IfMissing `
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx" `
     (Join-Path $modelsDir "vad\silero_vad.onnx")
 
-Write-Host "== STT: English (sherpa-onnx NeMo-CTC conformer-small, int8) =="
+Write-Host "== STT: English (sherpa-onnx NeMo-CTC conformer-medium, int8) =="
+# "small" was the original pick (fast, tiny) but WER wasn't good enough -- medium is a
+# straight drop-in upgrade (same architecture/pipeline, better-trained weights) for
+# meaningfully better accuracy at ~68MB vs ~46MB. "large" (~170MB) exists as a further step
+# up if medium still isn't accurate enough: replace conformer-medium with conformer-large.
 Get-IfMissing `
-    "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-en-conformer-small/resolve/main/model.int8.onnx" `
+    "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-en-conformer-medium/resolve/main/model.int8.onnx" `
     (Join-Path $modelsDir "stt\en\model.int8.onnx")
 Get-IfMissing `
-    "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-en-conformer-small/resolve/main/tokens.txt" `
+    "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-en-conformer-medium/resolve/main/tokens.txt" `
     (Join-Path $modelsDir "stt\en\tokens.txt")
 
 Write-Host "== STT: Hindi (AI4Bharat IndicConformer CTC, int8, via OpenVoiceOS) =="

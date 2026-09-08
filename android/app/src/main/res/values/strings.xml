@@ -9,6 +9,9 @@
     <string name="status_loading_models">Loading models…</string>
     <string name="status_mic_denied">Microphone permission denied — push-to-talk needs it</string>
 
+    <string name="lang_hindi">हिंदी</string>
+    <string name="lang_english">English</string>
+
     <string name="btn_hold_to_talk">Hold to talk</string>
     <string name="label_recognized_text">Recognized text</string>
     <string name="placeholder_stt_idle">(nothing yet)</string>

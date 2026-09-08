@@ -29,12 +29,16 @@ private const val VAD_WINDOW = 512
  * Wraps sherpa-onnx's VAD + STT + TTS for one language, loading models straight from the
  * app's assets (see build.gradle.kts noCompress + the models copied under src/main/assets).
  *
- * M1 scope: one language (Hindi), one phone, no networking. Push-to-talk itself is the
- * endpointer (record while held, transcribe on release) -- VAD is still real work, though:
- * it trims leading/trailing silence from the held-button recording before STT sees it,
- * which is exactly the "endpointing" job the architecture doc describes, just anchored to
- * the button instead of running hands-free. Hands-free auto-endpointing (finalizing before
- * release) is a latency optimization for a later pass, not needed for this milestone.
+ * M1 scope: one phone, no networking. Push-to-talk itself is the endpointer (record while
+ * held, transcribe on release) -- VAD is still real work, though: it trims leading/trailing
+ * silence from the held-button recording before STT sees it, which is exactly the
+ * "endpointing" job the architecture doc describes, just anchored to the button instead of
+ * running hands-free. Hands-free auto-endpointing (finalizing before release) is a latency
+ * optimization for a later pass, not needed for this milestone.
+ *
+ * One language is loaded at a time (not all bundled languages held in RAM at once, per the
+ * efficiency goal) -- call [init] again with a different lang to switch; it releases the
+ * previous models first.
  */
 class SherpaEngine(private val context: Context) {
 
@@ -47,8 +51,12 @@ class SherpaEngine(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
 
-    /** Loads all three models from assets. Call off the main thread -- this takes real time. */
+    /**
+     * Loads all three models from assets for [lang], releasing whatever was previously
+     * loaded first. Call off the main thread -- this takes real time.
+     */
     fun init(lang: String) {
+        release()
         val assets = context.assets
 
         vad = Vad(
@@ -98,6 +106,16 @@ class SherpaEngine(private val context: Context) {
             ),
         )
         Log.i(TAG, "SherpaEngine ready for lang=$lang")
+    }
+
+    /** Frees whatever models are currently loaded. Safe to call when nothing is loaded. */
+    fun release() {
+        vad?.release()
+        recognizer?.release()
+        tts?.release()
+        vad = null
+        recognizer = null
+        tts = null
     }
 
     private fun ttsModelFileFor(lang: String): String = when (lang) {

@@ -28,14 +28,42 @@
         app:layout_constraintStart_toStartOf="parent"
         tools:text="Ready" />
 
+    <!-- Language toggle: switches which model set SherpaEngine has loaded. Only one
+         language's models are ever held in RAM at a time (see SherpaEngine.init). -->
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/langToggle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@id/status"
+        app:layout_constraintStart_toStartOf="parent"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/langHindiButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/lang_hindi" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/langEnglishButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/lang_english" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
     <!-- Push-to-talk: STT direction -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/pttButton"
         android:layout_width="0dp"
         android:layout_height="120dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
         android:text="@string/btn_hold_to_talk"
-        app:layout_constraintTop_toBottomOf="@id/status"
+        app:layout_constraintTop_toBottomOf="@id/langToggle"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 

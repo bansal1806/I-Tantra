@@ -24,11 +24,10 @@ extreme semantic codec: throw away the waveform, keep the meaning, resynthesize 
 text → TTS → wav → VAD → STT → text — for Hindi and English, fully offline, and both come back
 100% correct.
 
-**M1 (Android, single phone) is code-complete for Hindi, not yet verified on hardware.**
-The app has a real push-to-talk loop (SherpaEngine.kt wires up sherpa-onnx's VAD + STT + TTS,
-no more stubs) and `gradlew assembleDebug` builds a working APK, but no Android device has been
-connected in this environment yet to confirm it actually runs correctly end-to-end on a phone.
-English is the immediate next step once Hindi is confirmed working on real hardware.
+**M1 (Android, single phone, Hindi) is done and verified on real hardware** — a OnePlus 9RT
+(Android 14, arm64). Push-to-talk correctly transcribes spoken Hindi, and typed Hindi text is
+spoken back audibly, fully offline. English is next (same pipeline, just needs the English
+model assets bundled and a language toggle in the UI), then M2 (two-phone transport).
 
 ### Try it on your phone
 
