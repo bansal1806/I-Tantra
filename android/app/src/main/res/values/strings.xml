@@ -4,6 +4,9 @@
 
     <string name="status_ready">Ready — hold the button and speak</string>
     <string name="status_listening">Listening…</string>
+    <string name="status_transcribing">Transcribing…</string>
+    <string name="status_speaking">Speaking…</string>
+    <string name="status_loading_models">Loading models…</string>
     <string name="status_mic_denied">Microphone permission denied — push-to-talk needs it</string>
 
     <string name="btn_hold_to_talk">Hold to talk</string>

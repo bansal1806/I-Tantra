@@ -21,6 +21,12 @@ android/**/build/
 android/*.iml
 android/.cxx/
 
+# Model assets bundled into the app -- copied from models/ by
+# scripts/copy_models_to_android_assets.ps1, not committed (same reasoning as models/**).
+android/app/src/main/assets/vad/
+android/app/src/main/assets/stt/
+android/app/src/main/assets/tts/
+
 # Misc
 .DS_Store
 Thumbs.db

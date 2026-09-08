@@ -37,9 +37,27 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    // Model weights don't compress well (already dense/quantized) and there's a lot of
+    // them -- skip deflate for these asset extensions to keep build times sane and avoid
+    // needless CPU/battery cost unpacking them from the APK at install time.
+    androidResources {
+        noCompress += listOf("onnx", "onnx_data")
+    }
+
+    packaging {
+        resources {
+            excludes += "META-INF/*"
+        }
+    }
 }
 
 dependencies {
+    // sherpa-onnx: no Maven/JitPack artifact, so the prebuilt AAR (Kotlin API + JNI .so per
+    // ABI) from https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.7 lives in libs/ --
+    // same version as desktop-spike's sherpa-onnx pip package, for consistency.
+    implementation(files("libs/sherpa-onnx-1.13.7.aar"))
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
