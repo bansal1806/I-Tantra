@@ -11,8 +11,14 @@
       useful again for M5 language expansion. NOTE: an earlier community repo
       (trysem/indicconformer-120m-onnx) was tried first and rejected -- every language folder in
       that repo turned out to contain identical (mislabeled) Assamese vocab/weights. Do not use it.
-    - English TTS: Piper vits-piper-en_US-amy-medium
-    - Hindi TTS: Piper vits-piper-hi_IN-priyamvada-medium
+    - English TTS: Piper vits-piper-en_US-amy-medium. Tried swapping to the "high" tier
+      (lessac-high) for better pronunciation/naturalness -- it measured RTF 1.4 on a
+      desktop CPU (slower than real time), and its int8-quantized build was worse still
+      (RTF 4.1: VITS doesn't quantize well on CPU here). Reverted; "medium" is the ceiling
+      for now without either a beefier target device or a proper fine-tune.
+    - Hindi TTS: Piper vits-piper-hi_IN-priyamvada-medium (no "high" tier exists for Hindi
+      at all; pratham/rohan are the other two voices in the same tier if priyamvada doesn't
+      suit)
 
   Re-run any time -- already-downloaded files are skipped.
 

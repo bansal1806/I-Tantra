@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Mic capture for push-to-talk. No INTERNET permission anywhere in this manifest:
-         iTantra is offline by design; transport (M2+) uses local Wi-Fi Direct/BLE sockets,
-         which don't require it. -->
+    <!-- Mic capture for push-to-talk. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Android gates the plain socket() syscall behind this permission for ANY networking,
+         including a purely local Wi-Fi-hotspot/LAN TCP connection that never leaves the
+         subnet (M2's transport); it's not the same thing as depending on the internet. No
+         cloud API is called anywhere in this app; "offline" refers to that, not to whether
+         this permission is declared. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <application
         android:allowBackup="false"

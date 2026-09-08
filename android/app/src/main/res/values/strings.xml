@@ -13,7 +13,8 @@
     <string name="lang_english">English</string>
 
     <string name="btn_hold_to_talk">Hold to talk</string>
-    <string name="label_recognized_text">Recognized text</string>
+    <string name="label_recognized_text">Recognized text (sent to peer)</string>
+    <string name="label_received_text">Received from peer (spoken automatically)</string>
     <string name="placeholder_stt_idle">(nothing yet)</string>
     <string name="placeholder_stt_pending">…</string>
 
@@ -21,4 +22,18 @@
     <string name="btn_speak">Speak</string>
     <string name="toast_enter_text">Type something first</string>
     <string name="toast_tts_stub">TTS not wired up yet — would speak: “%1$s”</string>
+
+    <string name="label_connection">Connection (same Wi-Fi/hotspot as the other phone)</string>
+    <string name="btn_host">Host</string>
+    <string name="btn_join">Join</string>
+    <string name="hint_host_ip">Host\'s IP address</string>
+    <string name="btn_connect">Connect</string>
+    <string name="conn_not_connected">Not connected</string>
+    <string name="conn_listening">Waiting for the other phone to join at %1$s…</string>
+    <string name="conn_connecting">Connecting…</string>
+    <string name="conn_connected">Connected to %1$s — messages will be sent live</string>
+    <string name="conn_disconnected">Disconnected</string>
+    <string name="toast_enter_host_ip">Enter the host\'s IP address first</string>
+    <string name="toast_sent">Sent (%1$d bytes)</string>
+    <string name="toast_send_failed">Not connected — not sent</string>
 </resources>

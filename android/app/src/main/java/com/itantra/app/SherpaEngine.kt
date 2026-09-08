@@ -187,6 +187,13 @@ class SherpaEngine(private val context: Context) {
         return text
     }
 
+    /**
+     * Trims leading/trailing silence, but -- unlike a naive "just take the first segment"
+     * approach -- keeps every segment VAD finds, concatenated in order. A push-to-talk
+     * recording routinely contains more than one segment (any natural pause/breath mid-
+     * sentence splits it), and dropping everything after the first one silently truncated
+     * real speech; this was a real accuracy bug, not just a missing nice-to-have.
+     */
     private fun trimWithVad(samples: FloatArray): FloatArray {
         val v = vad ?: return samples
         v.reset()
@@ -197,9 +204,20 @@ class SherpaEngine(private val context: Context) {
         }
         v.flush()
         if (v.empty()) return samples // no speech detected -- fall back to the raw clip
-        val segment = v.front().samples
-        v.clear()
-        return segment
+
+        val segments = mutableListOf<FloatArray>()
+        while (!v.empty()) {
+            segments.add(v.front().samples)
+            v.pop()
+        }
+        val total = segments.sumOf { it.size }
+        val combined = FloatArray(total)
+        var offset = 0
+        for (seg in segments) {
+            seg.copyInto(combined, offset)
+            offset += seg.size
+        }
+        return combined
     }
 
     // ---------------------------------------------------------------------
