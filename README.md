@@ -26,14 +26,22 @@ rehearsal-ready.
 ## Status
 
 **M0 through M4 are done and verified on real two-phone hardware** (a OnePlus 9RT and a Vivo
-V2336, connected over one phone's mobile hotspot). Push-to-talk works both directions, Hindi
-and English, fully offline: speak into one phone, the other speaks it back — with a live
-bitrate-savings readout, an alert mode that overrides silent/DND at max volume, and live
+V2336, connected over one phone's mobile hotspot). Push-to-talk works both directions, fully
+offline: speak into one phone, the other speaks it back — with a live bitrate-savings readout,
+an alert mode that overrides silent/DND at max volume, a hands-free "phone mode" (push-to-talk
+switched off) for when the PS's continuous-call behavior is wanted instead, and live
 RTF/latency numbers baked into the UI itself. See [docs/metrics.md](docs/metrics.md) for real
 captured numbers and [docs/demo-script.md](docs/demo-script.md) for how to run the demo.
 
-Next up: M5 (the remaining 8 languages) and the stretch goals (speaker-timbre, a real LoRa
-link, cross-lingual translation, store-and-forward/FEC) — see the milestones table below.
+**M5 (language expansion) is in progress**: 5 of the PS's 10 named languages now work
+end-to-end — Hindi, English, Malayalam, Gujarati, Bengali — selectable from a dropdown per
+phone. Hindi's voice ships in the APK; the other four download their TTS voice once, on first
+selection (a few tens of MB, fetched from the same public model releases
+`scripts/download_models.ps1` uses for desktop dev) and are cached on-device after that — see
+`ModelManager.kt`. This keeps the install small without giving up languages, and the fetch is a
+one-time setup step, not a runtime dependency: recognition and synthesis themselves never touch
+the network. The remaining 5 (Marathi, Kannada, Telugu, Tamil, Odia) have no usable open TTS
+voice found yet — STT-only or not attempted; see docs/metrics.md's "what's next".
 
 ### Try it on your phone(s)
 
@@ -81,7 +89,7 @@ Two things worth knowing if you touch the STT model setup:
 | M2 | Two-phone transport | Speak on phone A, hear it on phone B, offline, ~1-2s | ✅ Done |
 | M3 | Innovation layer | Live bitrate/compression display; alert messages override volume/silent mode | ✅ Done |
 | M4 | Metrics + hardening | Real WER/RTF/latency/footprint numbers from physical phones | ✅ Done |
-| M5 | Language expansion | Remaining 8 languages added; weak TTS voices revisited | ⏳ Next |
+| M5 | Language expansion | Remaining 8 languages added; weak TTS voices revisited | 🔶 5/10 (hi, en, ml, gu, bn) |
 | — | Stretch (pick one) | Speaker-timbre, real LoRa link, cross-lingual, store-and-forward+FEC | Not started |
 
 Full plan: `C:\Users\Admin\.claude\plans\drifting-swinging-fairy.md`.

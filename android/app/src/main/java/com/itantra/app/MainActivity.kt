@@ -339,6 +339,15 @@ class MainActivity : AppCompatActivity() {
         binding.status.text = getString(R.string.status_loading_models)
         Thread {
             try {
+                // Hindi's TTS voice ships in the APK; every other language's is fetched here,
+                // once, the first time it's picked -- see ModelManager's doc for why.
+                if (ModelManager.isDownloadable(lang) && !ModelManager.isReady(applicationContext, lang)) {
+                    runOnUiThread { binding.status.text = getString(R.string.status_downloading, 0) }
+                    ModelManager.download(applicationContext, lang) { percent ->
+                        runOnUiThread { binding.status.text = getString(R.string.status_downloading, percent) }
+                    }
+                    runOnUiThread { binding.status.text = getString(R.string.status_loading_models) }
+                }
                 engine.init(lang)
                 engineReady = true
                 runOnUiThread {

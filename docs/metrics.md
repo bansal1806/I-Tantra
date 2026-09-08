@@ -10,16 +10,23 @@ Both over the same two-phone Wi-Fi hotspot link used for the M2/M3 demo.
 
 ## Footprint (Efficiency — 20%)
 
-| | Before ABI fix | After ABI fix |
-|---|---|---|
-| Debug APK size | 529 MB | **389 MB** |
+| | 2 languages, before ABI fix | 2 languages, after ABI fix | 5 languages, all bundled | 5 languages, download-on-demand |
+|---|---|---|---|---|
+| Debug APK size | 529 MB | 389 MB | 1.02 GB | **730 MB** |
 
-The fix: the sherpa-onnx AAR ships native `.so` for 4 ABIs (arm64-v8a, armeabi-v7a, x86,
+The ABI fix: the sherpa-onnx AAR ships native `.so` for 4 ABIs (arm64-v8a, armeabi-v7a, x86,
 x86_64); every phone we've tested — and the overwhelming majority of Android devices in the
 field — is arm64-v8a. Restricting `ndk.abiFilters` to just that (`app/build.gradle.kts`)
-dropped 140MB for zero quality tradeoff. The remaining ~389MB is genuinely two full
-language model sets bundled uncompressed (Hindi + English STT+TTS, ~353MB) — see
-"what's next" below for the real lever on this number.
+dropped 140MB for zero quality tradeoff.
+
+Going from 2 to 5 languages (M5) initially meant bundling every language's STT *and* TTS in
+the APK — 1.02GB, genuinely too large for the PS's low/mid-range-phone target. The fix was
+download-on-demand for TTS voices (`ModelManager.kt`): Hindi's voice still ships in the APK
+(instant, zero-setup, matching the flagship demo language), the other four fetch their voice
+once on first selection and cache it under app-external storage. That's the 730MB now — still
+all 5 languages' *STT* bundled (~660MB; the AI4Bharat IndicConformer ONNX metadata patch this
+needs isn't reproducible in-app yet, see `ModelManager.kt`'s docstring) plus Hindi's TTS
+(~78MB); the other four TTS voices (a few tens of MB each) aren't paid for until picked.
 
 | | Phone A | Phone B |
 |---|---|---|
@@ -73,10 +80,20 @@ time -- well inside the "feels conversational" bar M2's plan set.
 
 ## What's next (real levers, not aspirational)
 
-- **Per-language download-on-demand instead of bundling both languages** is the actual
-  lever on the 389MB number — noted in `scripts/copy_models_to_android_assets.ps1`'s
-  docstring already. Would cut the installed size roughly in half for a single-language use
-  session.
+- **STT download-on-demand, not just TTS**: the remaining ~660MB is entirely bundled STT for
+  5 languages. Same lever as `ModelManager.kt` already applies to TTS, blocked on
+  reproducing `scripts/patch_stt_metadata.py`'s ONNX metadata patch in-app (needs Python's
+  onnx library today) or self-hosting pre-patched copies instead of AI4Bharat/OpenVoiceOS's
+  originals.
+- **Marathi, Kannada, Telugu, Tamil, Odia**: no usable open TTS voice found for any of these
+  across Piper/Mimic3/Coqui's public releases (exhaustively checked) — STT-only or blocked,
+  not attempted yet. Real fix is likely a fine-tune, not a search for a voice that doesn't
+  exist.
+- **Cross-device language mismatch**: `handleReceivedFrame` speaks a received message in
+  whatever language the *receiver* currently has loaded, not the sender's `frame.lang` — a
+  message sent in a language the receiver hasn't switched to gets mispronounced (spoken with
+  the wrong voice/phonemizer), not silently dropped. Not hit in the demo script (both phones
+  stay on the same language), but a real gap if that changes.
 - English TTS quality tier: tried and reverted (see M2 commit) — "high" tier measured
   RTF > 1 on desktop, so "medium" stays until either a beefier target device is in scope or
   a proper fine-tune happens.

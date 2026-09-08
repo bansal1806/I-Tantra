@@ -72,6 +72,11 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
+    // For extracting downloaded TTS voice archives (ModelManager) -- the sherpa-onnx
+    // tts-models release only ships them as .tar.bz2, and there's no bzip2 support in the
+    // Android/JVM standard library.
+    implementation("org.apache.commons:commons-compress:1.26.2")
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")

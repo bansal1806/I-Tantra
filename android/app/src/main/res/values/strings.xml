@@ -7,6 +7,7 @@
     <string name="status_transcribing">Transcribing…</string>
     <string name="status_speaking">Speaking…</string>
     <string name="status_loading_models">Loading models…</string>
+    <string name="status_downloading">Downloading voice… %1$d%%</string>
     <string name="status_mic_denied">Microphone permission denied — push-to-talk needs it</string>
     <string name="status_engine_error">Couldn\'t load: %1$s</string>
     <string name="btn_retry">Retry</string>

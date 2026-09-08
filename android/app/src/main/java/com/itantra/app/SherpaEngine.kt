@@ -29,6 +29,10 @@ private const val VAD_WINDOW = 512
 private const val MIN_FREE_STORAGE_MB = 100L
 private const val MAX_REMOTE_MUTE_MS = 8000L
 
+/** The only language whose TTS voice ships in assets -- see ModelManager for why the rest
+ *  download on demand instead. STT and VAD stay bundled for every language regardless. */
+private const val BUNDLED_TTS_LANG = "hi"
+
 /**
  * [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
  * length (used for M3's "equivalent voice-note size" bitrate comparison); [decodeMs] is how
@@ -46,8 +50,11 @@ data class TtsResult(val synthMs: Long, val audioDurationSeconds: Float)
 class EngineInitException(message: String) : Exception(message)
 
 /**
- * Wraps sherpa-onnx's VAD + STT + TTS for one language, loading models straight from the
- * app's assets (see build.gradle.kts noCompress + the models copied under src/main/assets).
+ * Wraps sherpa-onnx's VAD + STT + TTS for one language. VAD and STT always load from the
+ * app's assets (see build.gradle.kts noCompress + the models copied under src/main/assets);
+ * TTS does too, but only for [BUNDLED_TTS_LANG] -- every other language's voice is fetched
+ * on demand by [ModelManager] and loaded from real disk instead, to keep the APK a
+ * reasonable size (see ModelManager's doc for the full reasoning).
  *
  * Two capture modes, matching the PS's own "push-to-talk, or if turned off it should work
  * like a phone" requirement:
@@ -158,22 +165,39 @@ class SherpaEngine(private val context: Context) {
             ),
         )
 
-        val ttsModelFile = ttsModelFileFor(lang)
-        val assetDataDir = ttsDataDirFor(lang)
-        val dataDir = if (assetDataDir.isNotEmpty()) {
-            val extractedRoot = copyDataDir(assetDataDir)
-            "$extractedRoot/$assetDataDir"
+        // Hindi's TTS voice ships in assets (the flagship, zero-setup language); everything
+        // else is fetched on demand by ModelManager and lives on real disk -- pass a null
+        // AssetManager to OfflineTts for that case, which is its documented signal to load
+        // from file paths instead (newFromFile, not newFromAsset).
+        val ttsModelPath: String
+        val ttsTokensPath: String
+        val ttsDataDirPath: String
+        val ttsAssets: android.content.res.AssetManager?
+        if (lang == BUNDLED_TTS_LANG) {
+            val assetDataDir = ttsDataDirFor(lang)
+            ttsDataDirPath = if (assetDataDir.isNotEmpty()) {
+                val extractedRoot = copyDataDir(assetDataDir)
+                "$extractedRoot/$assetDataDir"
+            } else {
+                ""
+            }
+            ttsModelPath = "tts/$lang/${ttsModelFileFor(lang)}"
+            ttsTokensPath = "tts/$lang/tokens.txt"
+            ttsAssets = assets
         } else {
-            ""
+            ttsModelPath = ModelManager.modelFile(context, lang).absolutePath
+            ttsTokensPath = ModelManager.tokensFile(context, lang).absolutePath
+            ttsDataDirPath = ModelManager.dataDir(context, lang)
+            ttsAssets = null
         }
         tts = OfflineTts(
-            assets,
+            ttsAssets,
             OfflineTtsConfig(
                 model = OfflineTtsModelConfig(
                     vits = OfflineTtsVitsModelConfig(
-                        model = "tts/$lang/$ttsModelFile",
-                        tokens = "tts/$lang/tokens.txt",
-                        dataDir = dataDir,
+                        model = ttsModelPath,
+                        tokens = ttsTokensPath,
+                        dataDir = ttsDataDirPath,
                     ),
                     numThreads = 2,
                     provider = "cpu",
@@ -207,20 +231,16 @@ class SherpaEngine(private val context: Context) {
         tts = null
     }
 
+    // Only ever called for lang == BUNDLED_TTS_LANG ("hi") -- every other language's TTS
+    // voice comes from ModelManager instead, which knows its own filenames/dataDir rules
+    // (en/ml/gu are Piper-or-Mimic3/espeak-based like Hindi; bn is Coqui-trained and needs
+    // no espeak-ng-data at all).
     private fun ttsModelFileFor(lang: String): String = when (lang) {
         "hi" -> "hi_IN-priyamvada-medium.onnx"
-        "en" -> "en_US-amy-medium.onnx"
-        "ml" -> "ml_IN-meera-medium.onnx"
-        "gu" -> "gu_IN-cmu-indic_low.onnx" // Mimic3, not Piper -- Piper has no Gujarati voice
-        "bn" -> "model.onnx" // Coqui's own export naming, not per-voice like the others
-        else -> throw IllegalArgumentException("No TTS voice bundled for lang=$lang")
+        else -> throw IllegalArgumentException("No bundled TTS voice for lang=$lang")
     }
 
-    /** Empty for a voice with no espeak-ng-data (Coqui-trained bn tokenizes by character,
-     *  not phonemes) -- sherpa-onnx wants "" for that, not a path to something that isn't
-     *  there. Every other bundled voice is Piper or Mimic3, both espeak-based. */
-    private fun ttsDataDirFor(lang: String): String =
-        if (lang == "bn") "" else "tts/$lang/espeak-ng-data"
+    private fun ttsDataDirFor(lang: String): String = "tts/$lang/espeak-ng-data"
 
     // ---------------------------------------------------------------------
     // STT: push-to-talk recording
