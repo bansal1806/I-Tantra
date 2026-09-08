@@ -1,14 +1,19 @@
 <#
 .SYNOPSIS
-  Downloads the MVP (Hindi + English) VAD/STT/TTS models for iTantra's desktop spike (M0).
+  Downloads the VAD/STT/TTS models for iTantra's desktop spike (M0): English, Hindi,
+  Malayalam, Gujarati, Bengali -- the 5 of the PS's 10 required languages that currently
+  have a working on-device TTS voice anywhere (checked exhaustively across sherpa-onnx's
+  own Piper/Mimic3/Coqui releases and Hugging Face; Marathi/Kannada/Telugu/Tamil/Odia don't,
+  see docs/metrics.md).
 
 .DESCRIPTION
   Fetches:
     - Silero VAD (ONNX)
-    - English STT: sherpa-onnx NeMo-CTC conformer-small (int8), from csukuangfj/HF
-    - Hindi STT: AI4Bharat IndicConformer, CTC, int8, converted by OpenVoiceOS (MIT) -- same
-      org/format covers all 22 Indic languages under OpenVoiceOS/ai4bharat-indicconformer-<code>-onnx,
-      useful again for M5 language expansion. NOTE: an earlier community repo
+    - English STT: sherpa-onnx NeMo-CTC conformer-medium (int8), from csukuangfj/HF
+    - Hindi/Malayalam/Gujarati/Bengali STT: AI4Bharat IndicConformer, CTC, int8, converted by
+      OpenVoiceOS (MIT) -- same org/format covers all 22 Indic languages under
+      OpenVoiceOS/ai4bharat-indicconformer-<code>-onnx, useful again if TTS coverage for the
+      remaining 5 languages ever closes. NOTE: an earlier community repo
       (trysem/indicconformer-120m-onnx) was tried first and rejected -- every language folder in
       that repo turned out to contain identical (mislabeled) Assamese vocab/weights. Do not use it.
     - English TTS: Piper vits-piper-en_US-amy-medium. Tried swapping to the "high" tier
@@ -19,6 +24,13 @@
     - Hindi TTS: Piper vits-piper-hi_IN-priyamvada-medium (no "high" tier exists for Hindi
       at all; pratham/rohan are the other two voices in the same tier if priyamvada doesn't
       suit)
+    - Malayalam TTS: Piper vits-piper-ml_IN-meera-medium (arjun-medium is the other voice)
+    - Gujarati TTS: Mimic3 vits-mimic3-gu_IN-cmu-indic_low -- not Piper (Piper has no
+      Gujarati voice at all), but the same OfflineTtsVitsModelConfig interface, verified
+      working. Only "low" quality tier exists; audibly the weakest of the 5 languages.
+    - Bengali TTS: Coqui vits-coqui-bn-custom_female -- also not Piper. Unlike every other
+      voice here, ships no espeak-ng-data (Coqui tokenizes by character, not phonemes), so
+      its dataDir is legitimately empty; see SherpaEngine.ttsModelFileFor.
 
   Re-run any time -- already-downloaded files are skipped.
 
@@ -69,13 +81,15 @@ Get-IfMissing `
     "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-en-conformer-medium/resolve/main/tokens.txt" `
     (Join-Path $modelsDir "stt\en\tokens.txt")
 
-Write-Host "== STT: Hindi (AI4Bharat IndicConformer CTC, int8, via OpenVoiceOS) =="
-Get-IfMissing `
-    "https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-hi-onnx/resolve/main/model.int8.onnx" `
-    (Join-Path $modelsDir "stt\hi\model.int8.onnx")
-Get-IfMissing `
-    "https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-hi-onnx/resolve/main/vocab.txt" `
-    (Join-Path $modelsDir "stt\hi\tokens.txt")
+foreach ($lang in @("hi", "ml", "gu", "bn")) {
+    Write-Host "== STT: $lang (AI4Bharat IndicConformer CTC, int8, via OpenVoiceOS) =="
+    Get-IfMissing `
+        "https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-$lang-onnx/resolve/main/model.int8.onnx" `
+        (Join-Path $modelsDir "stt\$lang\model.int8.onnx")
+    Get-IfMissing `
+        "https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-$lang-onnx/resolve/main/vocab.txt" `
+        (Join-Path $modelsDir "stt\$lang\tokens.txt")
+}
 
 Write-Host "== TTS: English (Piper vits-piper-en_US-amy-medium) =="
 $enTtsArchive = Join-Path $modelsDir "tts\_en_US-amy-medium.tar.bz2"
@@ -91,6 +105,30 @@ $hiTtsDir = Join-Path $modelsDir "tts\hi"
 Get-IfMissing "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-hi_IN-priyamvada-medium.tar.bz2" $hiTtsArchive
 if (-not (Test-Path (Join-Path $hiTtsDir "hi_IN-priyamvada-medium.onnx"))) {
     Expand-TarBz2AndFlatten $hiTtsArchive $hiTtsDir
+}
+
+Write-Host "== TTS: Malayalam (Piper vits-piper-ml_IN-meera-medium) =="
+$mlTtsArchive = Join-Path $modelsDir "tts\_ml_IN-meera-medium.tar.bz2"
+$mlTtsDir = Join-Path $modelsDir "tts\ml"
+Get-IfMissing "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ml_IN-meera-medium.tar.bz2" $mlTtsArchive
+if (-not (Test-Path (Join-Path $mlTtsDir "ml_IN-meera-medium.onnx"))) {
+    Expand-TarBz2AndFlatten $mlTtsArchive $mlTtsDir
+}
+
+Write-Host "== TTS: Gujarati (Mimic3 vits-mimic3-gu_IN-cmu-indic_low) =="
+$guTtsArchive = Join-Path $modelsDir "tts\_gu_IN-cmu-indic_low.tar.bz2"
+$guTtsDir = Join-Path $modelsDir "tts\gu"
+Get-IfMissing "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-mimic3-gu_IN-cmu-indic_low.tar.bz2" $guTtsArchive
+if (-not (Test-Path (Join-Path $guTtsDir "gu_IN-cmu-indic_low.onnx"))) {
+    Expand-TarBz2AndFlatten $guTtsArchive $guTtsDir
+}
+
+Write-Host "== TTS: Bengali (Coqui vits-coqui-bn-custom_female) =="
+$bnTtsArchive = Join-Path $modelsDir "tts\_bn-custom_female.tar.bz2"
+$bnTtsDir = Join-Path $modelsDir "tts\bn"
+Get-IfMissing "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-coqui-bn-custom_female.tar.bz2" $bnTtsArchive
+if (-not (Test-Path (Join-Path $bnTtsDir "model.onnx"))) {
+    Expand-TarBz2AndFlatten $bnTtsArchive $bnTtsDir
 }
 
 Write-Host ""

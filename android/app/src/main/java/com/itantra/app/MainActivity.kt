@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -16,11 +17,11 @@ import java.net.NetworkInterface
 import java.util.Collections
 
 /**
- * M1+M2: push-to-talk on one phone (speech in -> recognized text; typed text in -> spoken
- * aloud, both via [SherpaEngine]), plus a two-phone link (M2's [Transport]) so what one
- * phone recognizes gets sent to and spoken by the other -- the actual walkie-talkie. Hindi
- * and English are both bundled; the toggle switches which one [SherpaEngine] has loaded
- * (only one language's models are held in RAM at a time).
+ * Push-to-talk (or, mode switched off, a continuous phone-mode call) on one phone -- speech
+ * in, recognized text shown; typed text in, spoken aloud, both via [SherpaEngine] -- plus a
+ * two-phone link (M2's [Transport]) so what one phone recognizes gets sent to and spoken by
+ * the other. [languages] lists what's selectable; only one language's models are held in
+ * RAM at a time (see SherpaEngine.init).
  */
 class MainActivity : AppCompatActivity() {
 
@@ -36,6 +37,18 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile
     private var callActive = false
+
+    /** (code, display label) for every language with a bundled TTS voice. Not all 10 the PS
+     *  asks for -- see docs/metrics.md for which 5 currently have one and why. */
+    private val languages: List<Pair<String, String>> by lazy {
+        listOf(
+            "hi" to getString(R.string.lang_hindi),
+            "en" to getString(R.string.lang_english),
+            "ml" to getString(R.string.lang_malayalam),
+            "gu" to getString(R.string.lang_gujarati),
+            "bn" to getString(R.string.lang_bengali),
+        )
+    }
 
     private val requestMicPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -64,9 +77,11 @@ class MainActivity : AppCompatActivity() {
 
         binding.retryButton.setOnClickListener { loadEngine() }
 
-        binding.langToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            val newLang = if (checkedId == binding.langEnglishButton.id) "en" else "hi"
+        val langAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, languages.map { it.second })
+        binding.langDropdown.setAdapter(langAdapter)
+        binding.langDropdown.setText(languages.first { it.first == lang }.second, false)
+        binding.langDropdown.setOnItemClickListener { _, _, position, _ ->
+            val newLang = languages[position].first
             if (newLang != lang) {
                 lang = newLang
                 loadEngine()
@@ -196,8 +211,7 @@ class MainActivity : AppCompatActivity() {
         callActive = true
         binding.pttButton.text = getString(R.string.btn_end_call)
         binding.status.text = getString(R.string.status_call_listening)
-        binding.langHindiButton.isEnabled = false
-        binding.langEnglishButton.isEnabled = false
+        binding.langDropdown.isEnabled = false
         binding.pttModeSwitch.isEnabled = false
         Thread {
             engine.startPhoneMode { result ->
@@ -212,8 +226,7 @@ class MainActivity : AppCompatActivity() {
         Thread { engine.stopPhoneMode() }.start()
         binding.pttButton.text = getString(R.string.btn_start_call)
         binding.status.text = getString(R.string.status_ready)
-        binding.langHindiButton.isEnabled = true
-        binding.langEnglishButton.isEnabled = true
+        binding.langDropdown.isEnabled = true
         binding.pttModeSwitch.isEnabled = true
     }
 
@@ -341,8 +354,7 @@ class MainActivity : AppCompatActivity() {
                     binding.status.text =
                         getString(R.string.status_engine_error, ex.message ?: ex.toString())
                     binding.retryButton.visibility = View.VISIBLE
-                    binding.langHindiButton.isEnabled = true
-                    binding.langEnglishButton.isEnabled = true
+                    binding.langDropdown.isEnabled = true
                     binding.pttModeSwitch.isEnabled = true
                 }
             }
@@ -352,8 +364,7 @@ class MainActivity : AppCompatActivity() {
     private fun setControlsEnabled(enabled: Boolean) {
         binding.pttButton.isEnabled = enabled
         binding.speakButton.isEnabled = enabled
-        binding.langHindiButton.isEnabled = enabled
-        binding.langEnglishButton.isEnabled = enabled
+        binding.langDropdown.isEnabled = enabled
         binding.pttModeSwitch.isEnabled = enabled
     }
 

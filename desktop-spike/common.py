@@ -14,15 +14,15 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 ROOT = Path(__file__).resolve().parent.parent
 MODELS = ROOT / "models"
 
+# All five languages' STT models are AI4Bharat IndicConformer via the same
+# OpenVoiceOS/ai4bharat-indicconformer-<lang>-onnx source and land as model.int8.onnx +
+# tokens.txt every time -- see scripts/download_models.ps1.
 STT_MODELS = {
-    "en": {
-        "model": MODELS / "stt" / "en" / "model.int8.onnx",
-        "tokens": MODELS / "stt" / "en" / "tokens.txt",
-    },
-    "hi": {
-        "model": MODELS / "stt" / "hi" / "model.int8.onnx",
-        "tokens": MODELS / "stt" / "hi" / "tokens.txt",
-    },
+    lang: {
+        "model": MODELS / "stt" / lang / "model.int8.onnx",
+        "tokens": MODELS / "stt" / lang / "tokens.txt",
+    }
+    for lang in ("en", "hi", "ml", "gu", "bn")
 }
 
 TTS_MODELS = {
@@ -35,6 +35,25 @@ TTS_MODELS = {
         "model": MODELS / "tts" / "hi" / "hi_IN-priyamvada-medium.onnx",
         "tokens": MODELS / "tts" / "hi" / "tokens.txt",
         "data_dir": MODELS / "tts" / "hi" / "espeak-ng-data",
+    },
+    "ml": {
+        "model": MODELS / "tts" / "ml" / "ml_IN-meera-medium.onnx",
+        "tokens": MODELS / "tts" / "ml" / "tokens.txt",
+        "data_dir": MODELS / "tts" / "ml" / "espeak-ng-data",
+    },
+    "gu": {
+        # Mimic3-trained (Piper's only Gujarati Coqui/Piper equivalent didn't exist); same
+        # OfflineTtsVitsModelConfig interface, verified working, just a different origin.
+        "model": MODELS / "tts" / "gu" / "gu_IN-cmu-indic_low.onnx",
+        "tokens": MODELS / "tts" / "gu" / "tokens.txt",
+        "data_dir": MODELS / "tts" / "gu" / "espeak-ng-data",
+    },
+    "bn": {
+        # Coqui-trained, not Piper -- no espeak-ng-data (character-level tokens instead of
+        # phonemized), so data_dir is empty. Confirmed working the same way regardless.
+        "model": MODELS / "tts" / "bn" / "model.onnx",
+        "tokens": MODELS / "tts" / "bn" / "tokens.txt",
+        "data_dir": None,
     },
 }
 

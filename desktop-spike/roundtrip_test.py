@@ -1,8 +1,8 @@
 """M0 'done when' check: text -> TTS -> wav -> VAD -> STT -> text, offline, no Android.
 
 This is the whole iTantra loop compressed onto one machine: it proves speech can be
-synthesized and then correctly recognized again, for both MVP languages, before any of it
-touches an Android phone.
+synthesized and then correctly recognized again, for every language with a working TTS
+voice, before any of it touches an Android phone.
 
 Usage:
     python roundtrip_test.py
@@ -19,6 +19,9 @@ from vad_test import find_segments
 CASES = [
     ("en", "Landslide near the bridge, send help"),
     ("hi", "पुल के पास भूस्खलन, मदद भेजो"),
+    ("ml", "പാലത്തിനടുത്ത് ഉരുൾപൊട്ടൽ, സഹായം അയക്കൂ"),
+    ("gu", "પુલ પાસે ભૂસ્ખલન, મદદ મોકલો"),
+    ("bn", "সেতুর কাছে ভূমিধস, সাহায্য পাঠান"),
 ]
 
 

@@ -18,7 +18,10 @@ def synth(text: str, lang: str, out_path: str) -> None:
         raise SystemExit(f"Unknown lang '{lang}'. Supported: {list(TTS_MODELS)}")
 
     cfg = TTS_MODELS[lang]
-    require(cfg["model"], cfg["tokens"], cfg["data_dir"])
+    # data_dir is None for a voice with no espeak-ng-data (e.g. bn, which is Coqui-trained
+    # and tokenizes by character rather than phonemizing) -- sherpa-onnx wants "" for that,
+    # not the literal string "None".
+    require(cfg["model"], cfg["tokens"], *([cfg["data_dir"]] if cfg["data_dir"] else []))
 
     config = sherpa_onnx.OfflineTtsConfig(
         model=sherpa_onnx.OfflineTtsModelConfig(
@@ -26,7 +29,7 @@ def synth(text: str, lang: str, out_path: str) -> None:
                 model=str(cfg["model"]),
                 lexicon="",
                 tokens=str(cfg["tokens"]),
-                data_dir=str(cfg["data_dir"]),
+                data_dir=str(cfg["data_dir"]) if cfg["data_dir"] else "",
             ),
             num_threads=2,
         ),

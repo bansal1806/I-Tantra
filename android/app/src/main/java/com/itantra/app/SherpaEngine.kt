@@ -159,8 +159,13 @@ class SherpaEngine(private val context: Context) {
         )
 
         val ttsModelFile = ttsModelFileFor(lang)
-        val assetDataDir = "tts/$lang/espeak-ng-data"
-        val extractedRoot = copyDataDir(assetDataDir)
+        val assetDataDir = ttsDataDirFor(lang)
+        val dataDir = if (assetDataDir.isNotEmpty()) {
+            val extractedRoot = copyDataDir(assetDataDir)
+            "$extractedRoot/$assetDataDir"
+        } else {
+            ""
+        }
         tts = OfflineTts(
             assets,
             OfflineTtsConfig(
@@ -168,7 +173,7 @@ class SherpaEngine(private val context: Context) {
                     vits = OfflineTtsVitsModelConfig(
                         model = "tts/$lang/$ttsModelFile",
                         tokens = "tts/$lang/tokens.txt",
-                        dataDir = "$extractedRoot/$assetDataDir",
+                        dataDir = dataDir,
                     ),
                     numThreads = 2,
                     provider = "cpu",
@@ -205,8 +210,17 @@ class SherpaEngine(private val context: Context) {
     private fun ttsModelFileFor(lang: String): String = when (lang) {
         "hi" -> "hi_IN-priyamvada-medium.onnx"
         "en" -> "en_US-amy-medium.onnx"
+        "ml" -> "ml_IN-meera-medium.onnx"
+        "gu" -> "gu_IN-cmu-indic_low.onnx" // Mimic3, not Piper -- Piper has no Gujarati voice
+        "bn" -> "model.onnx" // Coqui's own export naming, not per-voice like the others
         else -> throw IllegalArgumentException("No TTS voice bundled for lang=$lang")
     }
+
+    /** Empty for a voice with no espeak-ng-data (Coqui-trained bn tokenizes by character,
+     *  not phonemes) -- sherpa-onnx wants "" for that, not a path to something that isn't
+     *  there. Every other bundled voice is Piper or Mimic3, both espeak-based. */
+    private fun ttsDataDirFor(lang: String): String =
+        if (lang == "bn") "" else "tts/$lang/espeak-ng-data"
 
     // ---------------------------------------------------------------------
     // STT: push-to-talk recording

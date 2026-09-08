@@ -40,31 +40,25 @@
             android:text="@string/btn_retry"
             android:visibility="gone" />
 
-        <!-- Language toggle: switches which model set SherpaEngine has loaded. Only one
-             language's models are ever held in RAM at a time (see SherpaEngine.init). -->
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/langToggle"
+        <!-- Language selector: switches which model set SherpaEngine has loaded. Only one
+             language's models are ever held in RAM at a time (see SherpaEngine.init). A
+             dropdown rather than a button row: 5 languages today, up to 10 once TTS
+             coverage allows (see docs/metrics.md), doesn't fit a row of buttons. -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/langDropdownLayout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            app:singleSelection="true"
-            app:selectionRequired="true">
+            android:hint="@string/label_language">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/langHindiButton"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
+            <AutoCompleteTextView
+                android:id="@+id/langDropdown"
+                android:layout_width="200dp"
                 android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="@string/lang_hindi" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/langEnglishButton"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/lang_english" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                android:inputType="none"
+                tools:ignore="LabelFor" />
+        </com.google.android.material.textfield.TextInputLayout>
 
         <!-- M2 transport: one phone hosts (listens), the other joins by typing the host's
              local Wi-Fi IP. Both phones share a Wi-Fi network (hotspot from one of them, or

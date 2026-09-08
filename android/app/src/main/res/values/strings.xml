@@ -11,8 +11,12 @@
     <string name="status_engine_error">Couldn\'t load: %1$s</string>
     <string name="btn_retry">Retry</string>
 
+    <string name="label_language">Language</string>
     <string name="lang_hindi">हिंदी</string>
     <string name="lang_english">English</string>
+    <string name="lang_malayalam">മലയാളം</string>
+    <string name="lang_gujarati">ગુજરાતી</string>
+    <string name="lang_bengali">বাংলা</string>
 
     <string name="btn_hold_to_talk">Hold to talk</string>
     <string name="label_ptt_mode">Push-to-talk (off = phone mode, hands-free)</string>
