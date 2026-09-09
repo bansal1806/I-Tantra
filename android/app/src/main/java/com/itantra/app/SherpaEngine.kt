@@ -29,9 +29,10 @@ private const val VAD_WINDOW = 512
 private const val MIN_FREE_STORAGE_MB = 100L
 private const val MAX_REMOTE_MUTE_MS = 8000L
 
-/** The only language whose TTS voice ships in assets -- see ModelManager for why the rest
- *  download on demand instead. STT and VAD stay bundled for every language regardless. */
-private const val BUNDLED_TTS_LANG = "hi"
+/** The only language whose STT and TTS ship in assets -- see ModelManager for why the rest
+ *  download on demand instead. VAD stays bundled for every language regardless (it's
+ *  language-agnostic and tiny -- nothing to gain by ever downloading it separately). */
+private const val BUNDLED_LANG = "hi"
 
 /**
  * [text] is what push-to-talk recognized; [durationSeconds] is the trimmed utterance's
@@ -50,11 +51,11 @@ data class TtsResult(val synthMs: Long, val audioDurationSeconds: Float)
 class EngineInitException(message: String) : Exception(message)
 
 /**
- * Wraps sherpa-onnx's VAD + STT + TTS for one language. VAD and STT always load from the
- * app's assets (see build.gradle.kts noCompress + the models copied under src/main/assets);
- * TTS does too, but only for [BUNDLED_TTS_LANG] -- every other language's voice is fetched
- * on demand by [ModelManager] and loaded from real disk instead, to keep the APK a
- * reasonable size (see ModelManager's doc for the full reasoning).
+ * Wraps sherpa-onnx's VAD + STT + TTS for one language. VAD always loads from the app's
+ * assets (language-agnostic, tiny, bundled regardless). STT and TTS do too, but only for
+ * [BUNDLED_LANG] -- every other language's STT model and TTS voice are fetched on demand by
+ * [ModelManager] and loaded from real disk instead, to keep the APK a reasonable size (see
+ * ModelManager's doc for the full reasoning).
  *
  * Two capture modes, matching the PS's own "push-to-talk, or if turned off it should work
  * like a phone" requirement:
@@ -152,12 +153,28 @@ class SherpaEngine(private val context: Context) {
             ),
         )
 
+        // Hindi's STT ships in assets (the flagship, zero-setup language); everything else
+        // is fetched on demand by ModelManager and lives on real disk -- pass a null
+        // AssetManager to OfflineRecognizer for that case, its documented signal to load
+        // from file paths instead of assets (same pattern OfflineTts uses below).
+        val sttModelPath: String
+        val sttTokensPath: String
+        val sttAssets: android.content.res.AssetManager?
+        if (lang == BUNDLED_LANG) {
+            sttModelPath = "stt/$lang/model.int8.onnx"
+            sttTokensPath = "stt/$lang/tokens.txt"
+            sttAssets = assets
+        } else {
+            sttModelPath = ModelManager.sttModelFile(context, lang).absolutePath
+            sttTokensPath = ModelManager.sttTokensFile(context, lang).absolutePath
+            sttAssets = null
+        }
         recognizer = OfflineRecognizer(
-            assets,
+            sttAssets,
             OfflineRecognizerConfig(
                 modelConfig = OfflineModelConfig(
-                    nemo = OfflineNemoEncDecCtcModelConfig(model = "stt/$lang/model.int8.onnx"),
-                    tokens = "stt/$lang/tokens.txt",
+                    nemo = OfflineNemoEncDecCtcModelConfig(model = sttModelPath),
+                    tokens = sttTokensPath,
                     numThreads = 2,
                     provider = "cpu",
                 ),
@@ -165,15 +182,13 @@ class SherpaEngine(private val context: Context) {
             ),
         )
 
-        // Hindi's TTS voice ships in assets (the flagship, zero-setup language); everything
-        // else is fetched on demand by ModelManager and lives on real disk -- pass a null
-        // AssetManager to OfflineTts for that case, which is its documented signal to load
-        // from file paths instead (newFromFile, not newFromAsset).
+        // Same bundled-vs-downloaded split for TTS -- Hindi from assets, everything else
+        // fetched by ModelManager and loaded from real disk.
         val ttsModelPath: String
         val ttsTokensPath: String
         val ttsDataDirPath: String
         val ttsAssets: android.content.res.AssetManager?
-        if (lang == BUNDLED_TTS_LANG) {
+        if (lang == BUNDLED_LANG) {
             val assetDataDir = ttsDataDirFor(lang)
             ttsDataDirPath = if (assetDataDir.isNotEmpty()) {
                 val extractedRoot = copyDataDir(assetDataDir)
@@ -231,7 +246,7 @@ class SherpaEngine(private val context: Context) {
         tts = null
     }
 
-    // Only ever called for lang == BUNDLED_TTS_LANG ("hi") -- every other language's TTS
+    // Only ever called for lang == BUNDLED_LANG ("hi") -- every other language's TTS
     // voice comes from ModelManager instead, which knows its own filenames/dataDir rules
     // (en/ml/gu are Piper-or-Mimic3/espeak-based like Hindi; bn is Coqui-trained and needs
     // no espeak-ng-data at all).

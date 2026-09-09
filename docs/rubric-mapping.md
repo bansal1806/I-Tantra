@@ -10,8 +10,9 @@ actually scored.
   set, on real phones.
 - TTS: naturalness is the flagged risk — Piper/VITS quality varies a lot by language. Strategy:
   be excellent in Hindi + English (MVP), decent-to-acceptable elsewhere, and never demo a
-  language whose voice sounds bad. A VITS fine-tune on IndicVoices-R is the M5 lever if a
-  language needs it.
+  language whose voice sounds bad. All 10 PS languages now clear a 70%+ roundtrip
+  self-consistency bar (`docs/metrics.md`); a VITS fine-tune on IndicVoices-R remains the
+  lever if any specific language needs to sound better for a demo.
 
 ## Latency — 20%
 

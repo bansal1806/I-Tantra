@@ -1,19 +1,16 @@
 <#
 .SYNOPSIS
-  Downloads the VAD/STT/TTS models for iTantra's desktop spike (M0): English, Hindi,
-  Malayalam, Gujarati, Bengali -- the 5 of the PS's 10 required languages that currently
-  have a working on-device TTS voice anywhere (checked exhaustively across sherpa-onnx's
-  own Piper/Mimic3/Coqui releases and Hugging Face; Marathi/Kannada/Telugu/Tamil/Odia don't,
-  see docs/metrics.md).
+  Downloads the VAD/STT/TTS models for iTantra's desktop spike (M0), all 10 of the PS's
+  required languages: English, Hindi, Malayalam, Gujarati, Bengali, Marathi, Kannada,
+  Telugu, Tamil, Odia.
 
 .DESCRIPTION
   Fetches:
     - Silero VAD (ONNX)
     - English STT: sherpa-onnx NeMo-CTC conformer-medium (int8), from csukuangfj/HF
-    - Hindi/Malayalam/Gujarati/Bengali STT: AI4Bharat IndicConformer, CTC, int8, converted by
+    - Every other language's STT: AI4Bharat IndicConformer, CTC, int8, converted by
       OpenVoiceOS (MIT) -- same org/format covers all 22 Indic languages under
-      OpenVoiceOS/ai4bharat-indicconformer-<code>-onnx, useful again if TTS coverage for the
-      remaining 5 languages ever closes. NOTE: an earlier community repo
+      OpenVoiceOS/ai4bharat-indicconformer-<code>-onnx. NOTE: an earlier community repo
       (trysem/indicconformer-120m-onnx) was tried first and rejected -- every language folder in
       that repo turned out to contain identical (mislabeled) Assamese vocab/weights. Do not use it.
     - English TTS: Piper vits-piper-en_US-amy-medium. Tried swapping to the "high" tier
@@ -31,6 +28,13 @@
     - Bengali TTS: Coqui vits-coqui-bn-custom_female -- also not Piper. Unlike every other
       voice here, ships no espeak-ng-data (Coqui tokenizes by character, not phonemes), so
       its dataDir is legitimately empty; see SherpaEngine.ttsModelFileFor.
+    - Marathi/Kannada/Telugu/Tamil/Odia TTS: Meta MMS-TTS, ONNX-converted by the community
+      (willwade/mms-tts-multilingual-models-onnx on Hugging Face) -- sherpa-onnx's own
+      tts-models release has no Piper/Mimic3/Coqui voice for any of these 5 (checked
+      exhaustively). Same character-tokenized shape as Bengali (no espeak-ng-data). IMPORTANT:
+      MMS-TTS is CC-BY-NC 4.0 (non-commercial) -- unlike every other model in this project
+      (Piper/Coqui/Mimic3/AI4Bharat are all MIT/Apache-style permissive). Fine for this
+      hackathon submission; flag before any commercial use. See docs/metrics.md.
 
   Re-run any time -- already-downloaded files are skipped.
 
@@ -81,7 +85,7 @@ Get-IfMissing `
     "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-en-conformer-medium/resolve/main/tokens.txt" `
     (Join-Path $modelsDir "stt\en\tokens.txt")
 
-foreach ($lang in @("hi", "ml", "gu", "bn")) {
+foreach ($lang in @("hi", "ml", "gu", "bn", "mr", "kn", "te", "ta", "or")) {
     Write-Host "== STT: $lang (AI4Bharat IndicConformer CTC, int8, via OpenVoiceOS) =="
     Get-IfMissing `
         "https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-$lang-onnx/resolve/main/model.int8.onnx" `
@@ -129,6 +133,19 @@ $bnTtsDir = Join-Path $modelsDir "tts\bn"
 Get-IfMissing "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-coqui-bn-custom_female.tar.bz2" $bnTtsArchive
 if (-not (Test-Path (Join-Path $bnTtsDir "model.onnx"))) {
     Expand-TarBz2AndFlatten $bnTtsArchive $bnTtsDir
+}
+
+Write-Host "== TTS: Marathi/Kannada/Telugu/Tamil/Odia (Meta MMS-TTS, ONNX via willwade/HF -- CC-BY-NC 4.0) =="
+$mmsLangs = @{ mr = "mar"; kn = "kan"; te = "tel"; ta = "tam"; or = "ory" }
+foreach ($lang in $mmsLangs.Keys) {
+    $mmsCode = $mmsLangs[$lang]
+    $ttsDir = Join-Path $modelsDir "tts\$lang"
+    Get-IfMissing `
+        "https://huggingface.co/willwade/mms-tts-multilingual-models-onnx/resolve/main/$mmsCode/model.onnx" `
+        (Join-Path $ttsDir "model.onnx")
+    Get-IfMissing `
+        "https://huggingface.co/willwade/mms-tts-multilingual-models-onnx/resolve/main/$mmsCode/tokens.txt" `
+        (Join-Path $ttsDir "tokens.txt")
 }
 
 Write-Host ""

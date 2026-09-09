@@ -79,15 +79,35 @@ data class Frame(
 
         const val OPUS_VOICE_BITRATE_BPS = 16000
 
+        // All 10 of the PS's named languages get a real code -- was just hi/en for a while
+        // (frame.lang isn't read anywhere yet, see MainActivity's "what's next" note on
+        // cross-device language mismatch, so it went unnoticed), but the wire format should
+        // be correct regardless of what currently consumes it.
         private fun langToCode(lang: String): Int = when (lang) {
             "hi" -> 0
             "en" -> 1
+            "ml" -> 2
+            "gu" -> 3
+            "bn" -> 4
+            "mr" -> 5
+            "kn" -> 6
+            "te" -> 7
+            "ta" -> 8
+            "or" -> 9
             else -> 0xFF
         }
 
         private fun codeToLang(code: Int): String = when (code) {
             0 -> "hi"
             1 -> "en"
+            2 -> "ml"
+            3 -> "gu"
+            4 -> "bn"
+            5 -> "mr"
+            6 -> "kn"
+            7 -> "te"
+            8 -> "ta"
+            9 -> "or"
             else -> "?"
         }
 

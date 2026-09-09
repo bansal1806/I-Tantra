@@ -14,15 +14,15 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 ROOT = Path(__file__).resolve().parent.parent
 MODELS = ROOT / "models"
 
-# All five languages' STT models are AI4Bharat IndicConformer via the same
-# OpenVoiceOS/ai4bharat-indicconformer-<lang>-onnx source and land as model.int8.onnx +
-# tokens.txt every time -- see scripts/download_models.ps1.
+# All ten languages' STT models are AI4Bharat IndicConformer via the same
+# OpenVoiceOS/ai4bharat-indicconformer-<lang>-onnx source (except English) and land as
+# model.int8.onnx + tokens.txt every time -- see scripts/download_models.ps1.
 STT_MODELS = {
     lang: {
         "model": MODELS / "stt" / lang / "model.int8.onnx",
         "tokens": MODELS / "stt" / lang / "tokens.txt",
     }
-    for lang in ("en", "hi", "ml", "gu", "bn")
+    for lang in ("en", "hi", "ml", "gu", "bn", "mr", "kn", "te", "ta", "or")
 }
 
 TTS_MODELS = {
@@ -54,6 +54,19 @@ TTS_MODELS = {
         "model": MODELS / "tts" / "bn" / "model.onnx",
         "tokens": MODELS / "tts" / "bn" / "tokens.txt",
         "data_dir": None,
+    },
+    **{
+        # Meta MMS-TTS, ONNX-converted by willwade/mms-tts-multilingual-models-onnx (HF) --
+        # sherpa-onnx's own tts-models release has no Piper/Mimic3/Coqui voice for any of
+        # these 5 (checked exhaustively). Character-tokenized like bn, no espeak-ng-data.
+        # CC-BY-NC 4.0 (non-commercial) -- the one non-permissively-licensed model in this
+        # project; see download_models.ps1 and docs/metrics.md.
+        lang: {
+            "model": MODELS / "tts" / lang / "model.onnx",
+            "tokens": MODELS / "tts" / lang / "tokens.txt",
+            "data_dir": None,
+        }
+        for lang in ("mr", "kn", "te", "ta", "or")
     },
 }
 

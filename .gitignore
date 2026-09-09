@@ -33,3 +33,7 @@ Thumbs.db
 .claude/
 /u[iAB]*.xml
 models/tts/_extract*/
+
+# Packaged STT archives for GitHub Releases (scripts/package_stt_for_release.py output) --
+# uploaded as release assets, not committed; see stt-models-v1 release and ModelManager.kt.
+scripts/release-assets/

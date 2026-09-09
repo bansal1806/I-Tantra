@@ -22,6 +22,15 @@ CASES = [
     ("ml", "പാലത്തിനടുത്ത് ഉരുൾപൊട്ടൽ, സഹായം അയക്കൂ"),
     ("gu", "પુલ પાસે ભૂસ્ખલન, મદદ મોકલો"),
     ("bn", "সেতুর কাছে ভূমিধস, সাহায্য পাঠান"),
+    # Same sentence, machine/best-effort translated -- not independently native-speaker
+    # verified (unlike the 5 above, which have had real usage). Treat a low similarity score
+    # here as "check the translation too", not just "the model is bad" -- same spirit as the
+    # Gujarati mispronunciation this test already caught once.
+    ("mr", "पुलाजवळ भूस्खलन, मदत पाठवा"),
+    ("kn", "ಸೇತುವೆಯ ಬಳಿ ಭೂಕುಸಿತ, ಸಹಾಯ ಕಳುಹಿಸಿ"),
+    ("te", "వంతెన దగ్గర కొండచరియలు విరిగిపడ్డాయి, సహాయం పంపండి"),
+    ("ta", "பாலத்திற்கு அருகில் நிலச்சரிவு, உதவி அனுப்பவும்"),
+    ("or", "ପୁଲ ପାଖରେ ଭୂସ୍ଖଳନ, ସାହାଯ୍ୟ ପଠାନ୍ତୁ"),
 ]
 
 

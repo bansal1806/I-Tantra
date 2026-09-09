@@ -38,8 +38,8 @@ class MainActivity : AppCompatActivity() {
     @Volatile
     private var callActive = false
 
-    /** (code, display label) for every language with a bundled TTS voice. Not all 10 the PS
-     *  asks for -- see docs/metrics.md for which 5 currently have one and why. */
+    /** (code, display label) for all 10 of the PS's named languages. Hindi's models ship in
+     *  the APK; every other language downloads on first selection -- see ModelManager. */
     private val languages: List<Pair<String, String>> by lazy {
         listOf(
             "hi" to getString(R.string.lang_hindi),
@@ -47,6 +47,11 @@ class MainActivity : AppCompatActivity() {
             "ml" to getString(R.string.lang_malayalam),
             "gu" to getString(R.string.lang_gujarati),
             "bn" to getString(R.string.lang_bengali),
+            "mr" to getString(R.string.lang_marathi),
+            "kn" to getString(R.string.lang_kannada),
+            "te" to getString(R.string.lang_telugu),
+            "ta" to getString(R.string.lang_tamil),
+            "or" to getString(R.string.lang_odia),
         )
     }
 
@@ -339,9 +344,10 @@ class MainActivity : AppCompatActivity() {
         binding.status.text = getString(R.string.status_loading_models)
         Thread {
             try {
-                // Hindi's TTS voice ships in the APK; every other language's is fetched here,
+                // Hindi's STT+TTS ship in the APK; every other language's are fetched here,
                 // once, the first time it's picked -- see ModelManager's doc for why.
-                if (ModelManager.isDownloadable(lang) && !ModelManager.isReady(applicationContext, lang)) {
+                val needsDownload = ModelManager.isDownloadable(lang) || ModelManager.isSttDownloadable(lang)
+                if (needsDownload && !ModelManager.isReady(applicationContext, lang)) {
                     runOnUiThread { binding.status.text = getString(R.string.status_downloading, 0) }
                     ModelManager.download(applicationContext, lang) { percent ->
                         runOnUiThread { binding.status.text = getString(R.string.status_downloading, percent) }

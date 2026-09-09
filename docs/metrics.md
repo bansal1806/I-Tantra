@@ -10,9 +10,9 @@ Both over the same two-phone Wi-Fi hotspot link used for the M2/M3 demo.
 
 ## Footprint (Efficiency — 20%)
 
-| | 2 languages, before ABI fix | 2 languages, after ABI fix | 5 languages, all bundled | 5 languages, download-on-demand |
-|---|---|---|---|---|
-| Debug APK size | 529 MB | 389 MB | 1.02 GB | **730 MB** |
+| | 2 languages, before ABI fix | 2 languages, after ABI fix | 5 languages, all bundled | 5 languages, TTS download-on-demand | 5 languages, STT+TTS download-on-demand |
+|---|---|---|---|---|---|
+| Debug APK size | 529 MB | 389 MB | 1.02 GB | 730 MB | **250 MB** |
 
 The ABI fix: the sherpa-onnx AAR ships native `.so` for 4 ABIs (arm64-v8a, armeabi-v7a, x86,
 x86_64); every phone we've tested — and the overwhelming majority of Android devices in the
@@ -20,13 +20,20 @@ field — is arm64-v8a. Restricting `ndk.abiFilters` to just that (`app/build.gr
 dropped 140MB for zero quality tradeoff.
 
 Going from 2 to 5 languages (M5) initially meant bundling every language's STT *and* TTS in
-the APK — 1.02GB, genuinely too large for the PS's low/mid-range-phone target. The fix was
-download-on-demand for TTS voices (`ModelManager.kt`): Hindi's voice still ships in the APK
-(instant, zero-setup, matching the flagship demo language), the other four fetch their voice
-once on first selection and cache it under app-external storage. That's the 730MB now — still
-all 5 languages' *STT* bundled (~660MB; the AI4Bharat IndicConformer ONNX metadata patch this
-needs isn't reproducible in-app yet, see `ModelManager.kt`'s docstring) plus Hindi's TTS
-(~78MB); the other four TTS voices (a few tens of MB each) aren't paid for until picked.
+the APK — 1.02GB, genuinely too large for the PS's low/mid-range-phone target. Download-on-
+demand (`ModelManager.kt`) fixed it in two steps: TTS voices first (730MB — sherpa-onnx's own
+public model releases, no processing needed), then STT too (250MB — blocked until the
+AI4Bharat IndicConformer ONNX metadata patch each one needs, `scripts/patch_stt_metadata.py`,
+could be applied once and the already-patched models self-hosted as GitHub Release assets
+instead of reproduced in-app; see `scripts/package_stt_for_release.py` and the
+`stt-models-v1` release). Hindi's STT+TTS+VAD still ship in the APK — instant, zero-setup,
+matching the flagship demo language; every other language fetches both models once, on
+first selection, and caches them under app-external storage after that. 250MB is essentially
+just Hindi's models (~212MB) plus the app/runtime itself (~38MB) — a single-language install
+now costs about what it would if the app supported only that one language, regardless of how
+many it actually offers. The remaining 5 languages (Marathi, Kannada, Telugu, Tamil, Odia,
+added after this table's original measurement) use the identical downloaded path, so the
+250MB base install size is unchanged by going from 5 to 10 languages.
 
 | | Phone A | Phone B |
 |---|---|---|
@@ -54,6 +61,22 @@ Desktop (M0, `desktop-spike/roundtrip_test.py`, before any of this touched a pho
 English STT was later upgraded small → medium (NeMo conformer-CTC) after on-device testing
 showed accuracy issues; see the M1 commit for that trade (RTF stays comfortably low).
 
+All 10 languages, same roundtrip test, same "landslide near the bridge, send help" sentence
+(translated per language — the 5 below are machine/best-effort translations, not
+independently native-verified, unlike the 5 above which have had real usage; a low score
+here could mean the translation, not the model):
+
+| | ml | gu | bn | mr | kn | te | ta | or |
+|---|---|---|---|---|---|---|---|---|
+| Similarity | 98% | 100% | 100% | 94% | 100% | 98% | 92% | 91% |
+| TTS RTF | 0.09 | 0.07 | 0.53 | 0.40 | 0.39 | 0.30 | 0.29 | 0.27 |
+| STT RTF | 0.43 | 0.40 | 0.41 | 0.41 | 0.28 | 0.28 | 0.28 | 0.27 |
+
+All 10 clear the 70% "OK" bar the test uses, all RTFs comfortably under 1 on a desktop CPU.
+No repeat of the Gujarati "low"-tier mispronunciation caught earlier — the new 5 (Marathi/
+Kannada/Telugu/Tamil/Odia, all Meta MMS-TTS) score in the same 91-100% band as the original
+5, not visibly worse for being a different model family.
+
 On-device (M1-M4 testing, OnePlus 9RT + Vivo V2336, real push-to-talk over the two-phone
 link): the app now shows this live after every message (`sttPerfStats`/`ttsPerfStats` in
 `MainActivity.kt`) rather than requiring a separate benchmark run. From an actual
@@ -80,15 +103,10 @@ time -- well inside the "feels conversational" bar M2's plan set.
 
 ## What's next (real levers, not aspirational)
 
-- **STT download-on-demand, not just TTS**: the remaining ~660MB is entirely bundled STT for
-  5 languages. Same lever as `ModelManager.kt` already applies to TTS, blocked on
-  reproducing `scripts/patch_stt_metadata.py`'s ONNX metadata patch in-app (needs Python's
-  onnx library today) or self-hosting pre-patched copies instead of AI4Bharat/OpenVoiceOS's
-  originals.
-- **Marathi, Kannada, Telugu, Tamil, Odia**: no usable open TTS voice found for any of these
-  across Piper/Mimic3/Coqui's public releases (exhaustively checked) — STT-only or blocked,
-  not attempted yet. Real fix is likely a fine-tune, not a search for a voice that doesn't
-  exist.
+- **MMS-TTS license (Marathi/Kannada/Telugu/Tamil/Odia)**: CC-BY-NC 4.0, non-commercial only
+  — the one model in this project that isn't MIT/Apache-style permissive (Piper, Coqui,
+  Mimic3, and AI4Bharat's STT all are). Not a problem for this hackathon submission; would
+  need revisiting (a licensed voice, or a from-scratch fine-tune) before any commercial use.
 - **Cross-device language mismatch**: `handleReceivedFrame` speaks a received message in
   whatever language the *receiver* currently has loaded, not the sender's `frame.lang` — a
   message sent in a language the receiver hasn't switched to gets mispronounced (spoken with

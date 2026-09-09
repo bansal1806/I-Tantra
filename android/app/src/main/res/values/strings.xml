@@ -18,6 +18,11 @@
     <string name="lang_malayalam">മലയാളം</string>
     <string name="lang_gujarati">ગુજરાતી</string>
     <string name="lang_bengali">বাংলা</string>
+    <string name="lang_marathi">मराठी</string>
+    <string name="lang_kannada">ಕನ್ನಡ</string>
+    <string name="lang_telugu">తెలుగు</string>
+    <string name="lang_tamil">தமிழ்</string>
+    <string name="lang_odia">ଓଡ଼ିଆ</string>
 
     <string name="btn_hold_to_talk">Hold to talk</string>
     <string name="label_ptt_mode">Push-to-talk (off = phone mode, hands-free)</string>

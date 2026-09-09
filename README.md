@@ -33,15 +33,21 @@ switched off) for when the PS's continuous-call behavior is wanted instead, and 
 RTF/latency numbers baked into the UI itself. See [docs/metrics.md](docs/metrics.md) for real
 captured numbers and [docs/demo-script.md](docs/demo-script.md) for how to run the demo.
 
-**M5 (language expansion) is in progress**: 5 of the PS's 10 named languages now work
-end-to-end — Hindi, English, Malayalam, Gujarati, Bengali — selectable from a dropdown per
-phone. Hindi's voice ships in the APK; the other four download their TTS voice once, on first
-selection (a few tens of MB, fetched from the same public model releases
-`scripts/download_models.ps1` uses for desktop dev) and are cached on-device after that — see
-`ModelManager.kt`. This keeps the install small without giving up languages, and the fetch is a
-one-time setup step, not a runtime dependency: recognition and synthesis themselves never touch
-the network. The remaining 5 (Marathi, Kannada, Telugu, Tamil, Odia) have no usable open TTS
-voice found yet — STT-only or not attempted; see docs/metrics.md's "what's next".
+**M5 (language expansion) is done: all 10 of the PS's named languages work end-to-end** —
+Hindi, English, Malayalam, Gujarati, Bengali, Marathi, Kannada, Telugu, Tamil, Odia —
+selectable from a dropdown per phone. Hindi's STT+TTS ship in the APK; every other language
+downloads both models once, on first selection (roughly 95-110MB each, fetched from
+sherpa-onnx's public releases where a voice exists there, and self-hosted releases on this
+repo otherwise — see `ModelManager.kt`) and is cached on-device after that. This keeps the
+install to **250MB** — essentially just Hindi's models plus the app itself — regardless of
+how many languages the app offers, and the fetch is a one-time setup step, not a runtime
+dependency: recognition and synthesis themselves never touch the network.
+
+One thing worth knowing: Marathi/Kannada/Telugu/Tamil/Odia's voices are Meta's MMS-TTS
+(no Piper/Mimic3/Coqui voice exists for these 5 anywhere) and are **CC-BY-NC 4.0 —
+non-commercial only**, unlike every other model in this stack (Piper/Coqui/Mimic3/AI4Bharat
+are all MIT/Apache-style permissive). Fine for this hackathon submission; a real
+consideration if this ever became a commercial product. See `docs/metrics.md`.
 
 ### Try it on your phone(s)
 
@@ -89,7 +95,7 @@ Two things worth knowing if you touch the STT model setup:
 | M2 | Two-phone transport | Speak on phone A, hear it on phone B, offline, ~1-2s | ✅ Done |
 | M3 | Innovation layer | Live bitrate/compression display; alert messages override volume/silent mode | ✅ Done |
 | M4 | Metrics + hardening | Real WER/RTF/latency/footprint numbers from physical phones | ✅ Done |
-| M5 | Language expansion | Remaining 8 languages added; weak TTS voices revisited | 🔶 5/10 (hi, en, ml, gu, bn) |
+| M5 | Language expansion | All 10 PS languages working end-to-end | ✅ Done (10/10) |
 | — | Stretch (pick one) | Speaker-timbre, real LoRa link, cross-lingual, store-and-forward+FEC | Not started |
 
 Full plan: `C:\Users\Admin\.claude\plans\drifting-swinging-fairy.md`.
