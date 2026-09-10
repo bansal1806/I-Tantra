@@ -4,12 +4,23 @@ import android.content.Context
 import android.util.Log
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.zip.GZIPInputStream
 
 private const val TAG = "ModelManager"
+
+// Extraction's actual uncompressed size isn't known until the tar is fully read (entries are
+// sequential), so progress during that phase is estimated from the compressed file's size times
+// this ratio -- rough, but "moving at a rough estimate" beats "frozen with zero feedback for
+// however long decompression takes", which is what shipped before (see downloadAndExtract).
+// 1.4x roughly matches what's actually been measured for these archives (compressed 39-99MB ->
+// uncompressed 65-137MB); it doesn't need to be exact, just close enough that the bar doesn't
+// visibly overshoot 100% before the real finish.
+private const val ESTIMATED_EXPANSION_RATIO = 1.4
 
 /**
  * Download-on-demand for STT+TTS models not bundled in the APK.
@@ -79,27 +90,27 @@ object ModelManager {
         // bn, no espeak-ng-data. IMPORTANT: MMS-TTS is CC-BY-NC 4.0 (non-commercial) -- the
         // one non-permissively-licensed model in this project; see docs/metrics.md.
         "mr" to TtsVoice(
-            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-mr.tar.bz2",
+            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-mr.tar.gz",
             modelFileName = "model.onnx",
             hasEspeakData = false,
         ),
         "kn" to TtsVoice(
-            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-kn.tar.bz2",
+            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-kn.tar.gz",
             modelFileName = "model.onnx",
             hasEspeakData = false,
         ),
         "te" to TtsVoice(
-            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-te.tar.bz2",
+            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-te.tar.gz",
             modelFileName = "model.onnx",
             hasEspeakData = false,
         ),
         "ta" to TtsVoice(
-            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-ta.tar.bz2",
+            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-ta.tar.gz",
             modelFileName = "model.onnx",
             hasEspeakData = false,
         ),
         "or" to TtsVoice(
-            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-or.tar.bz2",
+            archiveUrl = "https://github.com/bansal1806/I-Tantra/releases/download/mms-tts-v1/mms-tts-or.tar.gz",
             modelFileName = "model.onnx",
             hasEspeakData = false,
         ),
@@ -109,15 +120,15 @@ object ModelManager {
     // STT models -- every downloadable language uses the same file names inside its archive
     // (model.int8.onnx, tokens.txt), so no per-language metadata beyond the URL is needed.
     private val DOWNLOADABLE_STT_URLS = mapOf(
-        "en" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-en.tar.bz2",
-        "ml" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-ml.tar.bz2",
-        "gu" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-gu.tar.bz2",
-        "bn" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-bn.tar.bz2",
-        "mr" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-mr.tar.bz2",
-        "kn" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-kn.tar.bz2",
-        "te" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-te.tar.bz2",
-        "ta" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-ta.tar.bz2",
-        "or" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-or.tar.bz2",
+        "en" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-en.tar.gz",
+        "ml" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-ml.tar.gz",
+        "gu" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-gu.tar.gz",
+        "bn" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-bn.tar.gz",
+        "mr" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-mr.tar.gz",
+        "kn" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-kn.tar.gz",
+        "te" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-te.tar.gz",
+        "ta" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-ta.tar.gz",
+        "or" to "https://github.com/bansal1806/I-Tantra/releases/download/stt-models-v1/stt-or.tar.gz",
     )
 
     /** True if [lang]'s TTS voice comes from this download path (as opposed to bundled). */
@@ -193,17 +204,36 @@ object ModelManager {
         onProgress(100)
     }
 
-    /** Shared by both STT and TTS: fetch [url] into [dir]/_archive.tar.bz2, then extract it
-     *  flat into [dir], stripping the one folder level every archive (sherpa-onnx's own
-     *  releases and scripts/package_stt_for_release.py's output alike) nests entries under. */
+    /**
+     * Shared by both STT and TTS: fetch [url] into [dir]/_archive.tar.(bz2|gz), then extract it
+     * flat into [dir], stripping the one folder level every archive (sherpa-onnx's own releases
+     * and scripts/package_stt_for_release.py's/package_mms_tts_for_release.py's output alike)
+     * nests entries under.
+     *
+     * [onProgress] covers this whole call, 0..100 -- download is the first 80 points,
+     * extraction the last 20 (see [ESTIMATED_EXPANSION_RATIO] for why extraction's share is an
+     * estimate rather than exact). Previously extraction reported *nothing*: the bar would hit
+     * whatever value the download alone mapped to (70% for the STT leg, since that's its share
+     * of the overall two-archive weighting in [download]) and sit there, unmoving, for however
+     * long decompression took -- indistinguishable from a hang. That's the exact "stuck at 70%"
+     * symptom: not a hang, a real but completely unreported CPU-bound phase.
+     *
+     * Format is picked by extension: self-hosted archives (STT, MMS-TTS) are gzip -- much
+     * cheaper to decode on a phone CPU than bzip2, and packaging is ours to choose (see
+     * scripts/package_stt_for_release.py). sherpa-onnx's own tts-models release ships bzip2 and
+     * always will (not ours to repackage), so that path stays supported too.
+     */
     private fun downloadAndExtract(dir: File, url: String, onProgress: (Int) -> Unit) {
         dir.mkdirs()
-        val archiveFile = File(dir, "_archive.tar.bz2")
+        val isGzip = url.endsWith(".tar.gz")
+        val archiveFile = File(dir, if (isGzip) "_archive.tar.gz" else "_archive.tar.bz2")
 
+        var compressedSize = 0L // reassigned below; kept as a safe default if connect() throws
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connect()
             val total = connection.contentLength
+            compressedSize = total.toLong()
             var downloaded = 0
             connection.inputStream.use { input ->
                 FileOutputStream(archiveFile).use { output ->
@@ -213,30 +243,51 @@ object ModelManager {
                         if (n < 0) break
                         output.write(buffer, 0, n)
                         downloaded += n
-                        if (total > 0) onProgress((downloaded * 100L / total).toInt())
+                        if (total > 0) onProgress((downloaded * 80L / total).toInt())
                     }
                 }
             }
         } finally {
             connection.disconnect()
         }
+        if (compressedSize <= 0L) compressedSize = archiveFile.length()
+        val estimatedUncompressedSize =
+            (compressedSize * ESTIMATED_EXPANSION_RATIO).toLong().coerceAtLeast(1L)
 
-        BZip2CompressorInputStream(archiveFile.inputStream()).use { bz ->
-            TarArchiveInputStream(bz).use { tar ->
-                var entry = tar.nextTarEntry
+        var extracted = 0L
+        val rawIn = archiveFile.inputStream()
+        val decompressed = if (isGzip) GZIPInputStream(rawIn) else BZip2CompressorInputStream(rawIn)
+        decompressed.use { dc ->
+            TarArchiveInputStream(dc).use { tar ->
+                var entry = tar.nextEntry
                 while (entry != null) {
                     if (!entry.isDirectory) {
                         val flatName = entry.name.substringAfter('/')
                         if (flatName.isNotEmpty()) {
                             val outFile = File(dir, flatName)
                             outFile.parentFile?.mkdirs()
-                            FileOutputStream(outFile).use { out -> tar.copyTo(out) }
+                            // Buffered + a real-sized copy loop -- the old code (tar.copyTo(out)
+                            // on a raw, unbuffered FileOutputStream) meant one syscall per
+                            // small internal chunk. Real, if secondary, slowness on top of
+                            // decompression itself being CPU-bound.
+                            BufferedOutputStream(FileOutputStream(outFile), 256 * 1024).use { out ->
+                                val buffer = ByteArray(256 * 1024)
+                                while (true) {
+                                    val n = tar.read(buffer)
+                                    if (n < 0) break
+                                    out.write(buffer, 0, n)
+                                    extracted += n
+                                    val pct = 80 + (extracted * 20L / estimatedUncompressedSize).toInt()
+                                    onProgress(pct.coerceIn(80, 99))
+                                }
+                            }
                         }
                     }
-                    entry = tar.nextTarEntry
+                    entry = tar.nextEntry
                 }
             }
         }
         archiveFile.delete()
+        onProgress(100)
     }
 }

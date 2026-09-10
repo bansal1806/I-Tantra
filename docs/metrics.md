@@ -107,11 +107,25 @@ time -- well inside the "feels conversational" bar M2's plan set.
   — the one model in this project that isn't MIT/Apache-style permissive (Piper, Coqui,
   Mimic3, and AI4Bharat's STT all are). Not a problem for this hackathon submission; would
   need revisiting (a licensed voice, or a from-scratch fine-tune) before any commercial use.
-- **Cross-device language mismatch**: `handleReceivedFrame` speaks a received message in
-  whatever language the *receiver* currently has loaded, not the sender's `frame.lang` — a
-  message sent in a language the receiver hasn't switched to gets mispronounced (spoken with
-  the wrong voice/phonemizer), not silently dropped. Not hit in the demo script (both phones
-  stay on the same language), but a real gap if that changes.
+- ~~Cross-device language mismatch~~ **fixed**: `handleReceivedFrame` now detects when
+  `frame.lang` doesn't match the receiver's loaded language, flags it visibly (a prefixed
+  warning on the received-text line, plus a toast naming both languages) instead of silently
+  mispronouncing. Deliberately doesn't auto-switch the receiver's engine to match — that would
+  also change what language the receiver's *own* replies get recognized in, and could stall a
+  reply on a mid-conversation download; surfacing the mismatch beats guessing which way to
+  resolve it.
+- ~~Download-on-demand was very slow and looked stuck partway through~~ **fixed, two causes**:
+  (1) extraction reported *zero* progress — the bar would hit whatever the download-only
+  portion mapped to (70% for the STT leg specifically, hence "stuck at 70%") and freeze there,
+  unmoving, for however long decompression actually took; now extraction reports progress too
+  (download 0-80%, extraction 80-100%, estimated from compressed size since true uncompressed
+  size isn't known until the tar is fully read). (2) The self-hosted archives (STT,
+  MMS-TTS) were bzip2 — much slower to decode on a phone CPU than gzip for a similar ratio on
+  already-dense int8 weights. Repackaged as gzip (`scripts/package_stt_for_release.py`,
+  `scripts/package_mms_tts_for_release.py`) — STT archives came out *smaller* too (93MB vs
+  99MB). sherpa-onnx's own bz2-packaged TTS releases (en/ml/gu/bn) are unaffected — not ours
+  to repackage, and `ModelManager.downloadAndExtract` now supports both formats, picked by
+  file extension.
 - English TTS quality tier: tried and reverted (see M2 commit) — "high" tier measured
   RTF > 1 on desktop, so "medium" stays until either a beefier target device is in scope or
   a proper fine-tune happens.

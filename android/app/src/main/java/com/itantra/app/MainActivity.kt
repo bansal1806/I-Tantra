@@ -55,6 +55,11 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** [code]'s display label, or the raw code itself if unrecognized (defensive -- a future
+     *  protocol version's language code this build doesn't know about yet). */
+    private fun languageDisplayName(code: String): String =
+        languages.firstOrNull { it.first == code }?.second ?: code
+
     private val requestMicPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
@@ -253,8 +258,27 @@ class MainActivity : AppCompatActivity() {
 
         val arrivalTime = System.nanoTime()
         val isAlert = frame.priority == Frame.PRIORITY_ALERT
-        binding.receivedText.text =
-            if (isAlert) getString(R.string.alert_received_prefix, frame.text) else frame.text
+        // "?" is Frame's own fallback for an unrecognized wire code (e.g. a future/older
+        // protocol version) -- never a real language, so never worth warning about. A real
+        // mismatch means this phone will speak the message in *its own* loaded language, not
+        // the sender's -- SherpaEngine only ever has one language's TTS resident at a time,
+        // and auto-switching on every mismatched frame would also silently change what
+        // language this phone's *own* replies get recognized in. Surfacing it beats guessing
+        // which way to resolve it.
+        val languageMismatch = frame.lang != "?" && frame.lang != lang
+        binding.receivedText.text = when {
+            isAlert -> getString(R.string.alert_received_prefix, frame.text)
+            languageMismatch ->
+                getString(R.string.received_language_mismatch_prefix, languageDisplayName(frame.lang), frame.text)
+            else -> frame.text
+        }
+        if (languageMismatch) {
+            Toast.makeText(
+                this,
+                getString(R.string.toast_language_mismatch, languageDisplayName(frame.lang), languageDisplayName(lang)),
+                Toast.LENGTH_LONG,
+            ).show()
+        }
         if (engineReady) {
             binding.status.text = getString(R.string.status_speaking)
             Thread {
