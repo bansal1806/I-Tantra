@@ -261,27 +261,46 @@ class SherpaEngine(private val context: Context) {
     // STT: push-to-talk recording
     // ---------------------------------------------------------------------
 
-    /** Starts recording from the mic. Call on button-down. */
+    /**
+     * Starts recording from the mic. Call on button-down. Returns false (and starts nothing)
+     * if the mic failed to initialize -- some devices' audio HAL can fail this *silently*:
+     * no exception from the AudioRecord constructor, [AudioRecord.getState] just stays
+     * [AudioRecord.STATE_UNINITIALIZED] instead of `STATE_INITIALIZED` (seen in practice with
+     * another app briefly holding the mic, on at least one real Realme/ColorOS test device).
+     * Calling [AudioRecord.stop] on that later -- which [stopListeningAndTranscribe] always
+     * used to do unconditionally -- throws a native `IllegalStateException` that's fatal for
+     * the whole app if uncaught. Checking state here, instead of finding out at stop() time,
+     * turns "app crashes" into "that tap didn't record, try again".
+     */
     @Suppress("MissingPermission") // caller (MainActivity) checks RECORD_AUDIO first
-    fun startListening() {
+    fun startListening(): Boolean {
+        pendingChunks = emptyList() // a failed init below must not resurface the *last*
+        //                             successful recording's leftover result.
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
-        audioRecord = AudioRecord(
+        val record = AudioRecord(
             MediaRecorder.AudioSource.MIC,
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minBuf, VAD_WINDOW * 2) * 4,
         )
+        if (record.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord failed to initialize (state=${record.state}) -- mic busy?")
+            record.release()
+            audioRecord = null
+            return false
+        }
+        audioRecord = record
         val chunks = mutableListOf<FloatArray>()
         isRecording = true
-        audioRecord?.startRecording()
+        record.startRecording()
 
         recordingThread = Thread {
             val buffer = ShortArray(VAD_WINDOW)
             while (isRecording) {
-                val n = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                val n = record.read(buffer, 0, buffer.size)
                 if (n > 0) {
                     chunks.add(FloatArray(n) { buffer[it] / 32768.0f })
                 }
@@ -289,16 +308,27 @@ class SherpaEngine(private val context: Context) {
             pendingChunks = chunks
         }
         recordingThread?.start()
+        return true
     }
 
     private var pendingChunks: List<FloatArray> = emptyList()
 
-    /** Stops recording and runs VAD-trimmed STT on whatever was captured. Call on button-up. */
+    /** Stops recording and runs VAD-trimmed STT on whatever was captured. Call on button-up.
+     *  Safe to call even if [startListening] just returned false (nothing to stop, [record]
+     *  is null) or left the AudioRecord in a non-recording state -- see [startListening]'s
+     *  docstring for why this used to crash the app instead of just yielding an empty result. */
     fun stopListeningAndTranscribe(): SttResult {
         isRecording = false
         recordingThread?.join()
-        audioRecord?.stop()
-        audioRecord?.release()
+        val record = audioRecord
+        if (record != null) {
+            try {
+                if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) record.stop()
+            } catch (ex: IllegalStateException) {
+                Log.e(TAG, "AudioRecord.stop() failed", ex)
+            }
+            record.release()
+        }
         audioRecord = null
 
         val total = pendingChunks.sumOf { it.size }
@@ -361,12 +391,13 @@ class SherpaEngine(private val context: Context) {
      * cancellation apply it to this stream -- not guaranteed on the low-end phones this
      * targets, which is why [isSpeaking] is also checked as a software-level guard.
      */
+    /** Returns false (and starts nothing) if [vad] isn't loaded yet, or the mic failed to
+     *  initialize -- see [startListening]'s docstring for why that check matters here too. */
     @Suppress("MissingPermission") // caller (MainActivity) checks RECORD_AUDIO first
-    fun startPhoneMode(onSentence: (SttResult) -> Unit) {
-        if (phoneModeActive) return
-        val v = vad ?: return
+    fun startPhoneMode(onSentence: (SttResult) -> Unit): Boolean {
+        if (phoneModeActive) return true
+        val v = vad ?: return false
         v.reset()
-        phoneModeActive = true
 
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -378,6 +409,12 @@ class SherpaEngine(private val context: Context) {
             AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minBuf, VAD_WINDOW * 2) * 4,
         )
+        if (record.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord (phone mode) failed to initialize (state=${record.state})")
+            record.release()
+            return false
+        }
+        phoneModeActive = true
         phoneModeRecord = record
         record.startRecording()
 
@@ -395,6 +432,7 @@ class SherpaEngine(private val context: Context) {
             }
         }
         phoneModeThread?.start()
+        return true
     }
 
     private fun transcribeSegment(segment: FloatArray): SttResult? {
@@ -410,12 +448,19 @@ class SherpaEngine(private val context: Context) {
         return if (text.isNotBlank()) SttResult(text, durationSeconds, decodeMs) else null
     }
 
-    /** Stops continuous listening. Blocks until the capture thread has actually exited. */
+    /** Stops continuous listening. Blocks until the capture thread has actually exited. Safe
+     *  to call even if [startPhoneMode] just returned false -- see its docstring. */
     fun stopPhoneMode() {
         phoneModeActive = false
         phoneModeThread?.join()
         phoneModeThread = null
-        phoneModeRecord?.stop()
+        try {
+            if (phoneModeRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                phoneModeRecord?.stop()
+            }
+        } catch (ex: IllegalStateException) {
+            Log.e(TAG, "AudioRecord.stop() (phone mode) failed", ex)
+        }
         phoneModeRecord?.release()
         phoneModeRecord = null
         setRemoteMuted(false) // don't carry a stale mute into the next call

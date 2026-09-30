@@ -134,7 +134,12 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_DOWN -> {
                     binding.status.text = getString(R.string.status_listening)
                     binding.recognizedText.text = getString(R.string.placeholder_stt_pending)
-                    engine.startListening()
+                    if (!engine.startListening()) {
+                        // Mic failed to initialize (see SherpaEngine.startListening's
+                        // docstring) -- recoverable, not a crash: just didn't start this time.
+                        binding.status.text = getString(R.string.status_mic_busy)
+                        binding.recognizedText.text = getString(R.string.placeholder_stt_idle)
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -224,9 +229,21 @@ class MainActivity : AppCompatActivity() {
         binding.langDropdown.isEnabled = false
         binding.pttModeSwitch.isEnabled = false
         Thread {
-            engine.startPhoneMode { result ->
+            val started = engine.startPhoneMode { result ->
                 runOnUiThread { binding.recognizedText.text = result.text }
                 sendToPeer(result, System.nanoTime())
+            }
+            if (!started) {
+                // Mic failed to initialize (see SherpaEngine.startPhoneMode's docstring) --
+                // recoverable: fall back to the pre-call state instead of a dead "On call"
+                // status with no mic actually running.
+                runOnUiThread {
+                    callActive = false
+                    binding.pttButton.text = getString(R.string.btn_start_call)
+                    binding.status.text = getString(R.string.status_mic_busy)
+                    binding.langDropdown.isEnabled = true
+                    binding.pttModeSwitch.isEnabled = true
+                }
             }
         }.start()
     }

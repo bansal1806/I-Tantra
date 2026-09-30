@@ -143,12 +143,29 @@ object ModelManager {
     private fun sttDir(context: Context, lang: String): File =
         File(context.getExternalFilesDir(null), "models/stt/$lang")
 
-    /** True if [lang] needs no download (bundled) or has already been fetched -- both TTS
-     *  and STT, since [SherpaEngine.init] needs both ready before it can load a language. */
+    /**
+     * True if [lang] needs no download (bundled) or has already been fully fetched -- both
+     * TTS and STT, since [SherpaEngine.init] needs both ready before it can load a language.
+     *
+     * Checks every file `SherpaEngine.init` will actually try to open, not just the model
+     * weights -- an interrupted extraction (app killed, connection dropped, the phone locked
+     * mid-download) can leave the *model* file present but `tokens.txt` missing, or an
+     * espeak-ng-data voice with an empty data directory. Checking only the model file, as
+     * this used to, reported "ready" for exactly that half-extracted state -- SherpaEngine
+     * would then fail to construct the native TTS/STT object with an opaque native error
+     * instead of ever re-triggering a download to fix itself.
+     */
     fun isReady(context: Context, lang: String): Boolean {
         val ttsVoice = DOWNLOADABLE_TTS[lang]
-        val ttsOk = ttsVoice == null || File(ttsDir(context, lang), ttsVoice.modelFileName).exists()
-        val sttOk = !isSttDownloadable(lang) || sttModelFile(context, lang).exists()
+        val ttsOk = ttsVoice == null || (
+            File(ttsDir(context, lang), ttsVoice.modelFileName).exists() &&
+                tokensFile(context, lang).exists() &&
+                (!ttsVoice.hasEspeakData || (File(ttsDir(context, lang), "espeak-ng-data").let {
+                    it.isDirectory && !it.list().isNullOrEmpty()
+                }))
+            )
+        val sttOk = !isSttDownloadable(lang) ||
+            (sttModelFile(context, lang).exists() && sttTokensFile(context, lang).exists())
         return ttsOk && sttOk
     }
 
