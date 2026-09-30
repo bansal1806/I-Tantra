@@ -131,3 +131,25 @@ time -- well inside the "feels conversational" bar M2's plan set.
   a proper fine-tune happens.
 - WER against a labeled test set (not just the M0 roundtrip self-consistency check) hasn't
   been run yet — would need a small fixed sentence set with reference transcripts.
+- ~~ModelManager.isReady() reported "ready" for a half-extracted download~~ **fixed**: an
+  interrupted extraction (exactly what the stuck-at-70% bug above caused, for real, on a real
+  device) could leave a model file present but `tokens.txt` missing, or an espeak-ng-data
+  voice with an empty data directory. `isReady()` only checked the model file, so it reported
+  "ready" anyway; `SherpaEngine.init()` then failed with an opaque native error ("Invalid
+  OfflineTtsConfig: failed to create native OfflineTts") instead of ever re-downloading to fix
+  itself. Now checks every file `init()` actually opens, so a corrupt leftover from before
+  this fix existed self-heals on next selection — no manual cleanup needed.
+- ~~AudioRecord.stop() could crash the whole app~~ **fixed**: found on a real device (Realme/
+  ColorOS) — `AudioRecord`'s constructor can silently fail to reach `STATE_INITIALIZED` (no
+  exception, e.g. another app briefly holding the mic), and calling `.stop()` on that state
+  throws `IllegalStateException` natively. `stopListeningAndTranscribe()`/`stopPhoneMode()`
+  called `.stop()` unconditionally, uncaught, on a background thread — fatal for the whole
+  process on every push-to-talk release once this happened once ("keeps stopping"). Both
+  start paths now check `AudioRecord.state` right after construction and return false instead
+  of proceeding; both stop paths additionally check `recordingState` and catch
+  `IllegalStateException` as defense in depth. Surfaced to the user as a recoverable "mic
+  busy, try again" status instead of a crash.
+- Not yet re-verified end-to-end on real hardware after the two fixes just above (the test
+  phone disconnected from ADB mid-session right as the crash-fix build was installed) — the
+  build is clean and the fix addresses the exact crash seen in that device's own logcat, but
+  hasn't had a confirmed clean push-to-talk pass since.
